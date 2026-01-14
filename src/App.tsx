@@ -8,6 +8,11 @@ import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
 import Login from "./pages/Login";
 import Register from "./pages/Register";
 import Dashboard from "./pages/Dashboard";
+import Rooms from "./pages/Rooms";
+import Bookings from "./pages/Bookings";
+import Reports from "./pages/Reports";
+import Billing from "./pages/Billing";
+import Expenses from "./pages/Expenses";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -35,7 +40,7 @@ const App = () => (
               path="/rooms"
               element={
                 <ProtectedRoute allowedRoles={['admin', 'receptionist']}>
-                  <Dashboard />
+                  <Rooms />
                 </ProtectedRoute>
               }
             />
@@ -43,7 +48,7 @@ const App = () => (
               path="/bookings"
               element={
                 <ProtectedRoute>
-                  <Dashboard />
+                  <Bookings />
                 </ProtectedRoute>
               }
             />
@@ -51,7 +56,7 @@ const App = () => (
               path="/billing"
               element={
                 <ProtectedRoute>
-                  <Dashboard />
+                  <Billing />
                 </ProtectedRoute>
               }
             />
@@ -67,7 +72,7 @@ const App = () => (
               path="/reports"
               element={
                 <ProtectedRoute allowedRoles={['admin']}>
-                  <Dashboard />
+                  <Reports />
                 </ProtectedRoute>
               }
             />
@@ -75,7 +80,7 @@ const App = () => (
               path="/expenses"
               element={
                 <ProtectedRoute allowedRoles={['admin']}>
-                  <Dashboard />
+                  <Expenses />
                 </ProtectedRoute>
               }
             />

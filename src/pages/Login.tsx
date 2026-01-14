@@ -44,7 +44,6 @@ export default function Login() {
   const demoCredentials = [
     { role: 'Admin', email: 'admin@gmail.com', password: 'admin123' },
     { role: 'Receptionist', email: 'receptionist@gmail.com', password: 'rec123' },
-    { role: 'Customer', email: 'customer@gmail.com', password: 'customer123' },
   ];
 
   const fillCredentials = (email: string, password: string) => {
@@ -169,7 +168,7 @@ export default function Login() {
                   <span className="bg-card px-2 text-muted-foreground">Demo Accounts</span>
                 </div>
               </div>
-              <div className="grid grid-cols-3 gap-2 w-full">
+              <div className="grid grid-cols-2 gap-2 w-full">
                 {demoCredentials.map((cred) => (
                   <Button
                     key={cred.role}

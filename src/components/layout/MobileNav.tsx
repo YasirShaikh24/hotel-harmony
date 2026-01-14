@@ -25,7 +25,6 @@ const primaryNavItems = [
 ];
 
 const moreNavItems = [
-  { icon: Users, label: 'Customers', href: '/customers', roles: ['admin', 'receptionist'] },
   { icon: TrendingUp, label: 'Reports', href: '/reports', roles: ['admin'] },
   { icon: Wallet, label: 'Expenses', href: '/expenses', roles: ['admin'] },
   { icon: MessageSquare, label: 'WhatsApp', href: '/whatsapp-logs', roles: ['admin'] },

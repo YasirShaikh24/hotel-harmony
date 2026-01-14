@@ -9,6 +9,7 @@ import { Receipt, Download, Eye, CreditCard, Clock, CheckCircle, MessageCircle }
 import { useAuth } from '@/contexts/AuthContext';
 import { invoicesApi } from '@/services/api';
 import { useToast } from '@/hooks/use-toast';
+import jsPDF from 'jspdf';
 
 interface Invoice {
   id: string;
@@ -182,45 +183,208 @@ export default function Billing() {
     ? invoices?.filter((invoice: Invoice) => invoice.customerEmail === user?.email)
     : invoices;
 
-  const handleDownloadPdf = async (invoice: Invoice) => {
+  const handleDownloadPdf = (invoice: Invoice) => {
     try {
-      const response = await invoicesApi.generatePdf(invoice.id);
-      const today = new Date().toISOString().split('T')[0];
-      const filename = `${today}_Room${invoice.roomNumber}_${invoice.id}.pdf`;
+      const doc = new jsPDF();
       
-      // Create download link
-      const downloadUrl = invoicesApi.downloadPdf(invoice.id);
-      const link = document.createElement('a');
-      link.href = downloadUrl;
-      link.download = filename;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
+      // Helper function to format currency
+      const formatCurrency = (amount: number): string => {
+        return amount.toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+      };
+      
+      // Set font sizes
+      const titleSize = 20;
+      const headingSize = 14;
+      const normalSize = 11;
+      const smallSize = 9;
+      
+      // Colors
+      const primaryColor = '#2563eb';
+      const grayColor = '#6b7280';
+      
+      // Header
+      doc.setFontSize(titleSize);
+      doc.setTextColor(primaryColor);
+      doc.text('HOTEL INVOICE', 105, 20, { align: 'center' });
+      
+      doc.setFontSize(normalSize);
+      doc.setTextColor(0, 0, 0);
+      doc.text('Invoice #' + invoice.id, 105, 30, { align: 'center' });
+      doc.text('Date: ' + new Date(invoice.invoiceDate).toLocaleDateString(), 105, 37, { align: 'center' });
+      
+      // Line separator
+      doc.setDrawColor(200, 200, 200);
+      doc.line(20, 45, 190, 45);
+      
+      // Customer Information
+      let yPos = 55;
+      doc.setFontSize(headingSize);
+      doc.setTextColor(primaryColor);
+      doc.text('Customer Information', 20, yPos);
+      
+      doc.setFontSize(normalSize);
+      doc.setTextColor(0, 0, 0);
+      yPos += 10;
+      doc.text('Name: ' + invoice.customerName, 20, yPos);
+      yPos += 7;
+      doc.text('Email: ' + invoice.customerEmail, 20, yPos);
+      yPos += 7;
+      doc.text('Phone: ' + invoice.customerPhone, 20, yPos);
+      
+      // Room Details
+      yPos += 15;
+      doc.setFontSize(headingSize);
+      doc.setTextColor(primaryColor);
+      doc.text('Room Details', 20, yPos);
+      
+      doc.setFontSize(normalSize);
+      doc.setTextColor(0, 0, 0);
+      yPos += 10;
+      doc.text('Room: ' + invoice.roomNumber + ' - ' + invoice.roomType, 20, yPos);
+      yPos += 7;
+      doc.text('Check-in: ' + new Date(invoice.checkIn).toLocaleDateString(), 20, yPos);
+      yPos += 7;
+      doc.text('Check-out: ' + new Date(invoice.checkOut).toLocaleDateString(), 20, yPos);
+      yPos += 7;
+      doc.text('Duration: ' + invoice.days + ' night' + (invoice.days > 1 ? 's' : ''), 20, yPos);
+      
+      // Charges Breakdown
+      yPos += 18;
+      doc.setFontSize(headingSize);
+      doc.setTextColor(primaryColor);
+      doc.text('Charges Breakdown', 20, yPos);
+      
+      // Table background
+      yPos += 5;
+      doc.setFillColor(245, 245, 245);
+      doc.rect(20, yPos, 170, 45, 'F');
+      
+      doc.setFontSize(normalSize);
+      doc.setTextColor(0, 0, 0);
+      yPos += 10;
+      
+      // Room charges
+      doc.text('Room Charges (' + invoice.days + ' night' + (invoice.days > 1 ? 's' : '') + ')', 25, yPos);
+      doc.text('Rs. ' + formatCurrency(invoice.roomCharges), 185, yPos, { align: 'right' });
+      yPos += 8;
+      
+      // Additional charges
+      doc.text('Additional Charges', 25, yPos);
+      doc.text('Rs. ' + formatCurrency(invoice.additionalCharges), 185, yPos, { align: 'right' });
+      yPos += 10;
+      
+      // Separator line
+      doc.setDrawColor(200, 200, 200);
+      doc.line(25, yPos, 185, yPos);
+      yPos += 7;
+      
+      // CGST
+      doc.setFontSize(smallSize);
+      doc.text('CGST (9%)', 25, yPos);
+      doc.text('Rs. ' + formatCurrency(invoice.cgst), 185, yPos, { align: 'right' });
+      yPos += 6;
+      
+      // SGST
+      doc.text('SGST (9%)', 25, yPos);
+      doc.text('Rs. ' + formatCurrency(invoice.sgst), 185, yPos, { align: 'right' });
+      
+      // Close the background box properly
+      yPos += 8;
+      
+      // Total section with line
+      yPos += 5;
+      doc.setDrawColor(primaryColor);
+      doc.setLineWidth(0.5);
+      doc.line(20, yPos, 190, yPos);
+      
+      yPos += 8;
+      doc.setFontSize(headingSize);
+      doc.setTextColor(primaryColor);
+      doc.text('Total Amount', 25, yPos);
+      doc.text('Rs. ' + formatCurrency(invoice.total), 185, yPos, { align: 'right' });
+      
+      // Payment Status
+      yPos += 18;
+      doc.setFontSize(normalSize);
+      doc.setTextColor(0, 0, 0);
+      doc.text('Payment Status:', 20, yPos);
+      
+      if (invoice.paymentStatus === 'paid') {
+        doc.setTextColor(34, 197, 94); // green
+        doc.text('PAID', 65, yPos);
+      } else {
+        doc.setTextColor(234, 179, 8); // yellow
+        doc.text('PENDING', 65, yPos);
+      }
+      
+      // Footer
+      yPos = 270;
+      doc.setFontSize(smallSize);
+      doc.setTextColor(grayColor);
+      doc.text('Thank you for choosing our hotel!', 105, yPos, { align: 'center' });
+      doc.text('For any queries, please contact us.', 105, yPos + 5, { align: 'center' });
+      
+      // Generate filename
+      const today = new Date().toISOString().split('T')[0];
+      const filename = today + '_Room' + invoice.roomNumber + '_' + invoice.id + '.pdf';
+      
+      // Save PDF
+      doc.save(filename);
       
       toast({
         title: 'Success',
-        description: `PDF downloaded as ${filename}`,
+        description: 'PDF downloaded as ' + filename,
       });
     } catch (error) {
+      console.error('PDF generation error:', error);
       toast({
         title: 'Error',
-        description: 'Failed to download PDF',
+        description: 'Failed to generate PDF',
         variant: 'destructive',
       });
     }
   };
 
-  const handleShareWhatsApp = async (invoice: Invoice) => {
+  const handleShareWhatsApp = (invoice: Invoice) => {
     try {
-      const response = await invoicesApi.shareWhatsApp(invoice.id);
+      // Format the invoice details for WhatsApp
+      const message = `*HOTEL INVOICE*\n\n` +
+        `Invoice #: ${invoice.id}\n` +
+        `Date: ${new Date(invoice.invoiceDate).toLocaleDateString()}\n\n` +
+        `*Customer:* ${invoice.customerName}\n` +
+        `*Room:* ${invoice.roomNumber} - ${invoice.roomType}\n` +
+        `*Check-in:* ${new Date(invoice.checkIn).toLocaleDateString()}\n` +
+        `*Check-out:* ${new Date(invoice.checkOut).toLocaleDateString()}\n` +
+        `*Duration:* ${invoice.days} night${invoice.days > 1 ? 's' : ''}\n\n` +
+        `*Charges:*\n` +
+        `Room Charges: ₹${invoice.roomCharges.toLocaleString()}\n` +
+        `Additional: ₹${invoice.additionalCharges.toLocaleString()}\n` +
+        `CGST (9%): ₹${invoice.cgst.toLocaleString()}\n` +
+        `SGST (9%): ₹${invoice.sgst.toLocaleString()}\n\n` +
+        `*Total Amount: ₹${invoice.total.toLocaleString()}*\n` +
+        `Status: ${invoice.paymentStatus.toUpperCase()}`;
+      
+      // Remove country code if present and format phone number
+      let phoneNumber = invoice.customerPhone.replace(/\D/g, '');
+      if (phoneNumber.length === 10) {
+        phoneNumber = '91' + phoneNumber; // Add India country code
+      }
+      
+      // Create WhatsApp URL
+      const whatsappUrl = `https://wa.me/${phoneNumber}?text=${encodeURIComponent(message)}`;
+      
+      // Open WhatsApp in new window
+      window.open(whatsappUrl, '_blank');
+      
       toast({
         title: 'Success',
-        description: `Invoice sent to ${invoice.customerPhone} via WhatsApp`,
+        description: 'Opening WhatsApp to share invoice',
       });
     } catch (error) {
+      console.error('WhatsApp share error:', error);
       toast({
         title: 'Error',
-        description: 'Failed to send via WhatsApp',
+        description: 'Failed to share via WhatsApp',
         variant: 'destructive',
       });
     }

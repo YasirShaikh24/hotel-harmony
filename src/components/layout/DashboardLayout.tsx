@@ -66,11 +66,13 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
               </Button>
             )}
             <div className="flex items-center gap-3">
-              <div className="w-8 h-8 rounded-lg bg-gradient-primary flex items-center justify-center">
-                <span className="text-primary-foreground font-bold text-sm">H</span>
-              </div>
+              <img
+                src="/hk.png"
+                alt="Hotel Krishna Logo"
+                className="w-8 h-8 rounded-full object-cover"
+              />
               <h1 className="text-lg font-semibold text-foreground hidden sm:block">
-                Hotel Management
+                Hotel Krishna
               </h1>
             </div>
           </div>

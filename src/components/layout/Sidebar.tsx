@@ -11,7 +11,6 @@ import {
   Wallet,
   MessageSquare,
   ChevronLeft,
-  Building2,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -56,18 +55,22 @@ export function Sidebar({ isOpen, onToggle }: SidebarProps) {
       <div className="h-16 flex items-center justify-between px-4 border-b border-sidebar-border">
         {isOpen ? (
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-sidebar-primary flex items-center justify-center shadow-gold">
-              <Building2 className="h-6 w-6 text-sidebar-primary-foreground" />
-            </div>
+            <img
+              src="/hk.png"
+              alt="Hotel Krishna Logo"
+              className="w-10 h-10 rounded-full object-cover shadow-gold"
+            />
             <div className="flex flex-col">
-              <span className="font-bold text-sidebar-foreground">Grand Hotel</span>
+              <span className="font-bold text-sidebar-foreground">Hotel Krishna</span>
               <span className="text-xs text-sidebar-foreground/70">Management System</span>
             </div>
           </div>
         ) : (
-          <div className="w-10 h-10 rounded-xl bg-sidebar-primary flex items-center justify-center mx-auto shadow-gold">
-            <Building2 className="h-6 w-6 text-sidebar-primary-foreground" />
-          </div>
+          <img
+            src="/hk.png"
+            alt="Hotel Krishna Logo"
+            className="w-10 h-10 rounded-full object-cover mx-auto shadow-gold"
+          />
         )}
       </div>
 

@@ -6,7 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
-import { Eye, EyeOff, Building2, Loader2 } from 'lucide-react';
+import { Eye, EyeOff, Loader2 } from 'lucide-react';
 
 export default function Login() {
   const [email, setEmail] = useState('');
@@ -59,11 +59,13 @@ export default function Login() {
         
         <div className="relative z-10 flex flex-col justify-center px-12 xl:px-20">
           <div className="flex items-center gap-4 mb-8">
-            <div className="w-16 h-16 rounded-2xl bg-accent flex items-center justify-center shadow-gold">
-              <Building2 className="h-9 w-9 text-accent-foreground" />
-            </div>
+            <img
+              src="/hk.png"
+              alt="Hotel Krishna Logo"
+              className="w-20 h-20 rounded-full object-cover shadow-gold border-2 border-accent"
+            />
             <div>
-              <h1 className="text-3xl font-bold text-primary-foreground">Grand Hotel</h1>
+              <h1 className="text-3xl font-bold text-primary-foreground">Hotel Krishna</h1>
               <p className="text-primary-foreground/70">Management System</p>
             </div>
           </div>
@@ -99,10 +101,12 @@ export default function Login() {
         <div className="w-full max-w-md animate-fade-in">
           {/* Mobile Logo */}
           <div className="flex items-center justify-center gap-3 mb-8 lg:hidden">
-            <div className="w-12 h-12 rounded-xl bg-gradient-primary flex items-center justify-center shadow-lg">
-              <Building2 className="h-7 w-7 text-primary-foreground" />
-            </div>
-            <span className="text-2xl font-bold text-foreground">Grand Hotel</span>
+            <img
+              src="/hk.png"
+              alt="Hotel Krishna Logo"
+              className="w-14 h-14 rounded-full object-cover shadow-lg"
+            />
+            <span className="text-2xl font-bold text-foreground">Hotel Krishna</span>
           </div>
 
           <Card className="border-0 shadow-xl">

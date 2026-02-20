@@ -198,5 +198,35 @@ INSERT INTO public.rooms (room_number, type, price, status, floor, description) 
 ('206', 'double', 4500, 'available', 2, 'Double AC room with modern amenities'),
 ('207', 'single', 2000, 'available', 2, 'Single Non-AC room with modern amenities');
 
+-- ============================================
+-- CREATE USERS IN SUPABASE AUTH
+-- ============================================
+-- NOTE: Run these commands in Supabase Dashboard → Authentication → Users
+-- Click "Add user" → "Create new user" for each:
+--
+-- Admin User:
+--   Email: admin@gmail.com
+--   Password: admin123
+--   Auto Confirm User: YES
+--
+-- Receptionist User:
+--   Email: receptionist@gmail.com
+--   Password: rec123
+--   Auto Confirm User: YES
+--
+-- After creating users, get their UUIDs from the Users table and run:
+-- 
+-- INSERT INTO public.profiles (user_id, name, email, phone)
+-- VALUES 
+--   ('ADMIN_USER_ID_HERE', 'Admin User', 'admin@gmail.com', '9999999999'),
+--   ('RECEPTIONIST_USER_ID_HERE', 'Receptionist User', 'receptionist@gmail.com', '8888888888');
+--
+-- INSERT INTO public.user_roles (user_id, role)
+-- VALUES 
+--   ('ADMIN_USER_ID_HERE', 'admin'),
+--   ('RECEPTIONIST_USER_ID_HERE', 'receptionist');
+--
+-- ============================================
+
 -- Verify setup
 SELECT 'Setup complete!' as message, COUNT(*) as total_rooms FROM public.rooms;

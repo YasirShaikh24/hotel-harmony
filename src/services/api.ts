@@ -126,6 +126,8 @@ export const roomsApi = {
   },
   
   update: async (id: string, updateData: any) => {
+    console.log('Updating room:', id, updateData);
+    
     // Map display names back to database enum values
     const reverseTypeMap: Record<string, string> = {
       'Single AC': 'single',
@@ -137,10 +139,14 @@ export const roomsApi = {
       'Presidential': 'presidential'
     };
     
+    const dbType = reverseTypeMap[updateData.type] || updateData.type.toLowerCase();
+    
+    console.log('Mapped type:', updateData.type, '->', dbType);
+    
     const { data, error } = await supabase
       .from('rooms')
       .update({
-        type: reverseTypeMap[updateData.type] || updateData.type,
+        type: dbType,
         price: updateData.price,
         status: updateData.status,
       })
@@ -148,7 +154,12 @@ export const roomsApi = {
       .select()
       .single();
     
-    if (error) throw error;
+    console.log('Update response:', { data, error });
+    
+    if (error) {
+      console.error('Room update error:', error);
+      throw error;
+    }
     
     const typeMap: Record<string, string> = {
       'single': 'Single AC',

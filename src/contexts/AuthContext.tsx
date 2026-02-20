@@ -1,4 +1,5 @@
-import React, { createContext, useContext, useState } from 'react';
+import React, { createContext, useContext, useState, useEffect } from 'react';
+import { supabase } from '@/integrations/supabase/client';
 import { UserRole } from '@/types/hotel';
 
 interface AuthUser {
@@ -20,37 +21,100 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-// Demo users - no database needed
-const DEMO_USERS = [
-  { id: '1', email: 'admin@gmail.com', password: 'admin123', name: 'Admin User', role: 'admin' as UserRole },
-  { id: '2', email: 'receptionist@gmail.com', password: 'rec123', name: 'Receptionist User', role: 'receptionist' as UserRole },
-  { id: '3', email: 'customer@gmail.com', password: 'customer123', name: 'Customer User', role: 'customer' as UserRole },
-];
-
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    // Check active session
+    supabase.auth.getSession().then(({ data: { session }, error }) => {
+      console.log('Initial session check:', { session: !!session, error });
+      if (session?.user) {
+        console.log('Found existing session for:', session.user.email);
+        loadUserProfile(session.user.id, session.user.email || '');
+      } else {
+        console.log('No existing session found');
+        setLoading(false);
+      }
+    });
+
+    // Listen for auth changes
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      console.log('Auth state changed:', event, { session: !!session });
+      if (session?.user) {
+        loadUserProfile(session.user.id, session.user.email || '');
+      } else {
+        setUser(null);
+        setLoading(false);
+      }
+    });
+
+    return () => subscription.unsubscribe();
+  }, []);
+
+  const loadUserProfile = async (userId: string, email: string) => {
+    try {
+      // Get user role
+      const { data: roleData } = await supabase
+        .from('user_roles')
+        .select('role')
+        .eq('user_id', userId)
+        .single();
+
+      // Get user profile
+      const { data: profileData } = await supabase
+        .from('profiles')
+        .select('name')
+        .eq('user_id', userId)
+        .single();
+
+      setUser({
+        id: userId,
+        email: email,
+        name: profileData?.name || email.split('@')[0],
+        role: (roleData?.role as UserRole) || 'customer',
+      });
+    } catch (error) {
+      console.error('Error loading user profile:', error);
+      setUser({
+        id: userId,
+        email: email,
+        name: email.split('@')[0],
+        role: 'customer',
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const signIn = async (email: string, password: string) => {
     setLoading(true);
     
-    // Simulate API delay
-    await new Promise(resolve => setTimeout(resolve, 1000));
-    
-    const demoUser = DEMO_USERS.find(u => u.email === email && u.password === password);
-    
-    if (demoUser) {
-      const { password: _, ...userWithoutPassword } = demoUser;
-      setUser(userWithoutPassword);
+    try {
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
+
+      if (error) {
+        setLoading(false);
+        return { error };
+      }
+
+      if (data.user) {
+        await loadUserProfile(data.user.id, data.user.email || '');
+      }
+
       setLoading(false);
       return { error: null };
-    } else {
+    } catch (error) {
       setLoading(false);
-      return { error: new Error('Invalid credentials') };
+      return { error: error as Error };
     }
   };
 
   const signOut = async () => {
+    await supabase.auth.signOut();
     setUser(null);
   };
 

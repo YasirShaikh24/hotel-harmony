@@ -20,7 +20,7 @@ interface Booking {
   customerName: string;
   customerEmail: string;
   customerPhone: string;
-  aadharNumber: string;
+  aadharNumber?: string;
   customer2Name?: string;
   customerGstNumber?: string;
   roomNumber: string;

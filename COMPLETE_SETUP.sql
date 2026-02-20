@@ -1,13 +1,12 @@
--- Create enum for user roles
+-- ============================================
+-- COMPLETE HOTEL MANAGEMENT DATABASE SETUP
+-- Run this ENTIRE script in Supabase SQL Editor
+-- ============================================
+
+-- Create enums
 CREATE TYPE public.app_role AS ENUM ('admin', 'receptionist', 'customer');
-
--- Create enum for room status
 CREATE TYPE public.room_status AS ENUM ('available', 'occupied', 'maintenance', 'cleaning');
-
--- Create enum for room type
 CREATE TYPE public.room_type AS ENUM ('single', 'double', 'deluxe', 'suite', 'presidential');
-
--- Create enum for booking status
 CREATE TYPE public.booking_status AS ENUM ('pending', 'confirmed', 'checked_in', 'checked_out', 'cancelled');
 
 -- Create profiles table
@@ -21,7 +20,7 @@ CREATE TABLE public.profiles (
     updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now()
 );
 
--- Create user_roles table (separate from profiles for security)
+-- Create user_roles table
 CREATE TABLE public.user_roles (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE NOT NULL,
@@ -130,168 +129,37 @@ ALTER TABLE public.income ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.expenses ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.whatsapp_logs ENABLE ROW LEVEL SECURITY;
 
--- Create security definer function for role checking
-CREATE OR REPLACE FUNCTION public.has_role(_user_id UUID, _role app_role)
-RETURNS BOOLEAN
-LANGUAGE sql
-STABLE
-SECURITY DEFINER
-SET search_path = public
-AS $$
-  SELECT EXISTS (
-    SELECT 1
-    FROM public.user_roles
-    WHERE user_id = _user_id
-      AND role = _role
-  )
-$$;
+-- RLS Policies for rooms (allow public read)
+CREATE POLICY "allow_public_read_rooms" ON public.rooms FOR SELECT USING (true);
+CREATE POLICY "allow_authenticated_manage_rooms" ON public.rooms FOR ALL TO authenticated USING (true) WITH CHECK (true);
 
--- Create function to get user role
-CREATE OR REPLACE FUNCTION public.get_user_role(_user_id UUID)
-RETURNS app_role
-LANGUAGE sql
-STABLE
-SECURITY DEFINER
-SET search_path = public
-AS $$
-  SELECT role FROM public.user_roles WHERE user_id = _user_id LIMIT 1
-$$;
+-- RLS Policies for profiles
+CREATE POLICY "users_can_view_own_profile" ON public.profiles FOR SELECT USING (auth.uid() = user_id);
+CREATE POLICY "users_can_update_own_profile" ON public.profiles FOR UPDATE USING (auth.uid() = user_id);
+CREATE POLICY "users_can_insert_own_profile" ON public.profiles FOR INSERT WITH CHECK (auth.uid() = user_id);
 
--- Profiles RLS policies
-CREATE POLICY "Users can view their own profile"
-ON public.profiles FOR SELECT
-USING (auth.uid() = user_id);
+-- RLS Policies for user_roles
+CREATE POLICY "users_can_view_own_roles" ON public.user_roles FOR SELECT USING (auth.uid() = user_id);
+CREATE POLICY "authenticated_can_manage_roles" ON public.user_roles FOR ALL TO authenticated USING (true) WITH CHECK (true);
 
-CREATE POLICY "Users can update their own profile"
-ON public.profiles FOR UPDATE
-USING (auth.uid() = user_id);
+-- RLS Policies for customers, bookings, invoices, income, expenses
+CREATE POLICY "authenticated_can_read_customers" ON public.customers FOR SELECT TO authenticated USING (true);
+CREATE POLICY "authenticated_can_manage_customers" ON public.customers FOR ALL TO authenticated USING (true) WITH CHECK (true);
 
-CREATE POLICY "Users can insert their own profile"
-ON public.profiles FOR INSERT
-WITH CHECK (auth.uid() = user_id);
+CREATE POLICY "authenticated_can_read_bookings" ON public.bookings FOR SELECT TO authenticated USING (true);
+CREATE POLICY "authenticated_can_manage_bookings" ON public.bookings FOR ALL TO authenticated USING (true) WITH CHECK (true);
 
-CREATE POLICY "Admins can view all profiles"
-ON public.profiles FOR SELECT
-TO authenticated
-USING (public.has_role(auth.uid(), 'admin'));
+CREATE POLICY "authenticated_can_read_invoices" ON public.invoices FOR SELECT TO authenticated USING (true);
+CREATE POLICY "authenticated_can_manage_invoices" ON public.invoices FOR ALL TO authenticated USING (true) WITH CHECK (true);
 
--- User roles RLS policies
-CREATE POLICY "Users can view their own roles"
-ON public.user_roles FOR SELECT
-USING (auth.uid() = user_id);
+CREATE POLICY "authenticated_can_read_income" ON public.income FOR SELECT TO authenticated USING (true);
+CREATE POLICY "authenticated_can_manage_income" ON public.income FOR ALL TO authenticated USING (true) WITH CHECK (true);
 
-CREATE POLICY "Admins can manage all roles"
-ON public.user_roles FOR ALL
-TO authenticated
-USING (public.has_role(auth.uid(), 'admin'));
+CREATE POLICY "authenticated_can_read_expenses" ON public.expenses FOR SELECT TO authenticated USING (true);
+CREATE POLICY "authenticated_can_manage_expenses" ON public.expenses FOR ALL TO authenticated USING (true) WITH CHECK (true);
 
--- Rooms RLS policies (public read, admin/receptionist write)
-CREATE POLICY "Anyone can view rooms"
-ON public.rooms FOR SELECT
-TO authenticated
-USING (true);
-
-CREATE POLICY "Admins can manage rooms"
-ON public.rooms FOR ALL
-TO authenticated
-USING (public.has_role(auth.uid(), 'admin'));
-
-CREATE POLICY "Receptionists can update room status"
-ON public.rooms FOR UPDATE
-TO authenticated
-USING (public.has_role(auth.uid(), 'receptionist'));
-
--- Customers RLS policies
-CREATE POLICY "Admins can view all customers"
-ON public.customers FOR SELECT
-TO authenticated
-USING (public.has_role(auth.uid(), 'admin'));
-
-CREATE POLICY "Receptionists can view all customers"
-ON public.customers FOR SELECT
-TO authenticated
-USING (public.has_role(auth.uid(), 'receptionist'));
-
-CREATE POLICY "Customers can view their own data"
-ON public.customers FOR SELECT
-TO authenticated
-USING (user_id = auth.uid());
-
-CREATE POLICY "Receptionists can add customers"
-ON public.customers FOR INSERT
-TO authenticated
-WITH CHECK (public.has_role(auth.uid(), 'receptionist') OR public.has_role(auth.uid(), 'admin'));
-
-CREATE POLICY "Receptionists can update customers"
-ON public.customers FOR UPDATE
-TO authenticated
-USING (public.has_role(auth.uid(), 'receptionist') OR public.has_role(auth.uid(), 'admin'));
-
--- Bookings RLS policies
-CREATE POLICY "Admins can view all bookings"
-ON public.bookings FOR SELECT
-TO authenticated
-USING (public.has_role(auth.uid(), 'admin'));
-
-CREATE POLICY "Receptionists can view all bookings"
-ON public.bookings FOR SELECT
-TO authenticated
-USING (public.has_role(auth.uid(), 'receptionist'));
-
-CREATE POLICY "Customers can view their own bookings"
-ON public.bookings FOR SELECT
-TO authenticated
-USING (customer_id IN (SELECT id FROM public.customers WHERE user_id = auth.uid()));
-
-CREATE POLICY "Staff can manage bookings"
-ON public.bookings FOR ALL
-TO authenticated
-USING (public.has_role(auth.uid(), 'admin') OR public.has_role(auth.uid(), 'receptionist'));
-
--- Invoices RLS policies
-CREATE POLICY "Admins can view all invoices"
-ON public.invoices FOR SELECT
-TO authenticated
-USING (public.has_role(auth.uid(), 'admin'));
-
-CREATE POLICY "Receptionists can view all invoices"
-ON public.invoices FOR SELECT
-TO authenticated
-USING (public.has_role(auth.uid(), 'receptionist'));
-
-CREATE POLICY "Customers can view their own invoices"
-ON public.invoices FOR SELECT
-TO authenticated
-USING (
-  booking_id IN (
-    SELECT b.id FROM public.bookings b
-    JOIN public.customers c ON b.customer_id = c.id
-    WHERE c.user_id = auth.uid()
-  )
-);
-
-CREATE POLICY "Staff can manage invoices"
-ON public.invoices FOR ALL
-TO authenticated
-USING (public.has_role(auth.uid(), 'admin') OR public.has_role(auth.uid(), 'receptionist'));
-
--- Income RLS policies (admin only)
-CREATE POLICY "Admins can manage income"
-ON public.income FOR ALL
-TO authenticated
-USING (public.has_role(auth.uid(), 'admin'));
-
--- Expenses RLS policies (admin only)
-CREATE POLICY "Admins can manage expenses"
-ON public.expenses FOR ALL
-TO authenticated
-USING (public.has_role(auth.uid(), 'admin'));
-
--- WhatsApp logs RLS policies
-CREATE POLICY "Staff can view whatsapp logs"
-ON public.whatsapp_logs FOR ALL
-TO authenticated
-USING (public.has_role(auth.uid(), 'admin') OR public.has_role(auth.uid(), 'receptionist'));
+CREATE POLICY "authenticated_can_read_whatsapp_logs" ON public.whatsapp_logs FOR SELECT TO authenticated USING (true);
+CREATE POLICY "authenticated_can_manage_whatsapp_logs" ON public.whatsapp_logs FOR ALL TO authenticated USING (true) WITH CHECK (true);
 
 -- Create trigger function for updated_at
 CREATE OR REPLACE FUNCTION public.update_updated_at_column()
@@ -300,7 +168,7 @@ BEGIN
     NEW.updated_at = now();
     RETURN NEW;
 END;
-$$ LANGUAGE plpgsql SET search_path = public;
+$$ LANGUAGE plpgsql;
 
 -- Add triggers for updated_at
 CREATE TRIGGER update_profiles_updated_at BEFORE UPDATE ON public.profiles FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
@@ -310,21 +178,25 @@ CREATE TRIGGER update_bookings_updated_at BEFORE UPDATE ON public.bookings FOR E
 CREATE TRIGGER update_invoices_updated_at BEFORE UPDATE ON public.invoices FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
 CREATE TRIGGER update_expenses_updated_at BEFORE UPDATE ON public.expenses FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
 
--- Create trigger to auto-create profile on signup
-CREATE OR REPLACE FUNCTION public.handle_new_user()
-RETURNS TRIGGER AS $$
-BEGIN
-    INSERT INTO public.profiles (user_id, name, email)
-    VALUES (
-        NEW.id,
-        COALESCE(NEW.raw_user_meta_data->>'name', split_part(NEW.email, '@', 1)),
-        NEW.email
-    );
-    RETURN NEW;
-END;
-$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
+-- Insert 17 rooms
+INSERT INTO public.rooms (room_number, type, price, status, floor, description) VALUES
+('101', 'single', 3000, 'occupied', 1, 'Single AC room with modern amenities'),
+('102', 'single', 2000, 'available', 1, 'Single Non-AC room with modern amenities'),
+('103', 'double', 4500, 'available', 1, 'Double AC room with modern amenities'),
+('104', 'double', 3500, 'available', 1, 'Double Non-AC room with modern amenities'),
+('105', 'single', 3000, 'available', 1, 'Single AC room with modern amenities'),
+('106', 'single', 2000, 'available', 1, 'Single Non-AC room with modern amenities'),
+('107', 'double', 4500, 'available', 1, 'Double AC room with modern amenities'),
+('108', 'double', 3500, 'available', 1, 'Double Non-AC room with modern amenities'),
+('109', 'single', 3000, 'available', 1, 'Single AC room with modern amenities'),
+('110', 'double', 4500, 'occupied', 1, 'Double AC room with modern amenities'),
+('201', 'single', 3000, 'available', 2, 'Single AC room with modern amenities'),
+('202', 'double', 4500, 'available', 2, 'Double AC room with modern amenities'),
+('203', 'single', 2000, 'available', 2, 'Single Non-AC room with modern amenities'),
+('204', 'double', 3500, 'available', 2, 'Double Non-AC room with modern amenities'),
+('205', 'single', 3000, 'available', 2, 'Single AC room with modern amenities'),
+('206', 'double', 4500, 'available', 2, 'Double AC room with modern amenities'),
+('207', 'single', 2000, 'available', 2, 'Single Non-AC room with modern amenities');
 
-CREATE TRIGGER on_auth_user_created
-AFTER INSERT ON auth.users
-FOR EACH ROW
-EXECUTE FUNCTION public.handle_new_user();
+-- Verify setup
+SELECT 'Setup complete!' as message, COUNT(*) as total_rooms FROM public.rooms;

@@ -7,10 +7,13 @@ import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { CalendarCheck, Users, Phone, Mail, Plus, Eye, Edit, LogIn, LogOut } from 'lucide-react';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Calendar } from '@/components/ui/calendar';
+import { CalendarCheck, Users, Phone, Mail, Plus, Eye, Edit, LogIn, LogOut, CalendarIcon } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { bookingsApi, roomsApi } from '@/services/api';
 import { useToast } from '@/hooks/use-toast';
+import { format } from 'date-fns';
 
 interface Booking {
   id: string;
@@ -18,6 +21,8 @@ interface Booking {
   customerEmail: string;
   customerPhone: string;
   aadharNumber: string;
+  customer2Name?: string;
+  customerGstNumber?: string;
   roomNumber: string;
   roomType: string;
   checkIn: string;
@@ -27,6 +32,7 @@ interface Booking {
   children: number;
   totalAmount: number;
   specialRequests?: string;
+  createdAt?: string;
 }
 
 interface Room {
@@ -60,6 +66,8 @@ function AddBookingModal({ isOpen, onClose }: AddBookingModalProps) {
     customerEmail: '',
     customerPhone: '',
     aadharNumber: '',
+    customer2Name: '',
+    customerGstNumber: '',
     roomNumber: '',
     checkIn: '',
     checkOut: '',
@@ -70,6 +78,7 @@ function AddBookingModal({ isOpen, onClose }: AddBookingModalProps) {
   
   const [formData, setFormData] = useState(initialFormData);
   const [selectedRoomPrice, setSelectedRoomPrice] = useState(0);
+  const [selectedRoomType, setSelectedRoomType] = useState('');
   
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -82,6 +91,7 @@ function AddBookingModal({ isOpen, onClose }: AddBookingModalProps) {
     if (isOpen) {
       setFormData(initialFormData);
       setSelectedRoomPrice(0);
+      setSelectedRoomType('');
     }
   }, [isOpen]);
 
@@ -113,6 +123,7 @@ function AddBookingModal({ isOpen, onClose }: AddBookingModalProps) {
     const room = rooms?.find((r: Room) => r.roomNumber === roomNumber);
     if (room) {
       setSelectedRoomPrice(room.price);
+      setSelectedRoomType(room.type);
       setFormData({ ...formData, roomNumber });
       calculateTotal(formData.checkIn, formData.checkOut, room.price);
     }
@@ -173,6 +184,24 @@ function AddBookingModal({ isOpen, onClose }: AddBookingModalProps) {
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-2">
+            <Label htmlFor="roomNumber">Room</Label>
+            <select
+              id="roomNumber"
+              value={formData.roomNumber}
+              onChange={(e) => handleRoomChange(e.target.value)}
+              className="room-select"
+              required
+            >
+              <option value="">Select room</option>
+              {rooms?.filter((room: Room) => room.status === 'available').map((room: Room) => (
+                <option key={room.id} value={room.roomNumber}>
+                  Room {room.roomNumber} - {room.type} (₹{room.price.toLocaleString()}/day)
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="space-y-2">
             <Label htmlFor="customerName">Customer Name</Label>
             <Input
               id="customerName"
@@ -182,35 +211,52 @@ function AddBookingModal({ isOpen, onClose }: AddBookingModalProps) {
             />
           </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="customerEmail">Customer Email</Label>
-            <Input
-              id="customerEmail"
-              type="email"
-              value={formData.customerEmail}
-              onChange={(e) => setFormData({ ...formData, customerEmail: e.target.value })}
-              required
-            />
-          </div>
+          {selectedRoomType && selectedRoomType.toLowerCase().includes('double') && (
+            <div className="space-y-2">
+              <Label htmlFor="customer2Name">Customer 2 Name (Optional)</Label>
+              <Input
+                id="customer2Name"
+                value={formData.customer2Name}
+                onChange={(e) => setFormData({ ...formData, customer2Name: e.target.value })}
+                placeholder="Enter second customer name (if applicable)"
+              />
+              <p className="text-xs text-muted-foreground">
+                Add second customer name for double occupancy. Useful if one customer leaves early.
+              </p>
+            </div>
+          )}
 
-          <div className="space-y-2">
-            <Label htmlFor="customerPhone">Customer Phone</Label>
-            <Input
-              id="customerPhone"
-              value={formData.customerPhone}
-              onChange={(e) => {
-                const value = e.target.value.replace(/\D/g, '');
-                if (value.length <= 10) {
-                  setFormData({ ...formData, customerPhone: value });
-                }
-              }}
-              placeholder="Enter 10-digit mobile number"
-              maxLength={10}
-              required
-            />
-            {formData.customerPhone && formData.customerPhone.length !== 10 && (
-              <p className="text-sm text-red-600">Mobile number must be exactly 10 digits</p>
-            )}
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label htmlFor="customerEmail">Customer Email</Label>
+              <Input
+                id="customerEmail"
+                type="email"
+                value={formData.customerEmail}
+                onChange={(e) => setFormData({ ...formData, customerEmail: e.target.value })}
+                required
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="customerPhone">Customer Phone</Label>
+              <Input
+                id="customerPhone"
+                value={formData.customerPhone}
+                onChange={(e) => {
+                  const value = e.target.value.replace(/\D/g, '');
+                  if (value.length <= 10) {
+                    setFormData({ ...formData, customerPhone: value });
+                  }
+                }}
+                placeholder="Enter 10-digit mobile number"
+                maxLength={10}
+                required
+              />
+              {formData.customerPhone && formData.customerPhone.length !== 10 && (
+                <p className="text-sm text-red-600">Mobile number must be exactly 10 digits</p>
+              )}
+            </div>
           </div>
 
           <div className="space-y-2">
@@ -234,27 +280,25 @@ function AddBookingModal({ isOpen, onClose }: AddBookingModalProps) {
           </div>
 
           <div className="space-y-2">
-            <Label>Room Selection</Label>
-            <div className="border rounded-lg p-2">
-              {rooms?.filter((room: Room) => room.status === 'available').map((room: Room) => (
-                <label key={room.id} className="flex items-center justify-between p-3 hover:bg-muted rounded cursor-pointer border-b last:border-b-0">
-                  <div className="flex items-center space-x-3">
-                    <input
-                      type="radio"
-                      name="roomNumber"
-                      value={room.roomNumber}
-                      checked={formData.roomNumber === room.roomNumber}
-                      onChange={(e) => handleRoomChange(e.target.value)}
-                      className="text-primary"
-                    />
-                    <div>
-                      <div className="font-medium">Room {room.roomNumber} - ₹{room.price.toLocaleString()}</div>
-                      <div className="text-sm text-muted-foreground">({room.type})</div>
-                    </div>
-                  </div>
-                </label>
-              ))}
-            </div>
+            <Label htmlFor="customerGstNumber">GST Number (Optional)</Label>
+            <Input
+              id="customerGstNumber"
+              value={formData.customerGstNumber}
+              onChange={(e) => {
+                const value = e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '');
+                if (value.length <= 15) {
+                  setFormData({ ...formData, customerGstNumber: value });
+                }
+              }}
+              placeholder="Enter 15-character GST number (if applicable)"
+              maxLength={15}
+            />
+            {formData.customerGstNumber && formData.customerGstNumber.length > 0 && formData.customerGstNumber.length !== 15 && (
+              <p className="text-sm text-yellow-600">GST number should be 15 characters</p>
+            )}
+            <p className="text-xs text-muted-foreground">
+              For business travelers who need GST invoice
+            </p>
           </div>
 
           <div className="grid grid-cols-2 gap-4">
@@ -329,16 +373,16 @@ function AddBookingModal({ isOpen, onClose }: AddBookingModalProps) {
                 <span className="font-medium">₹{formData.totalAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
               </div>
               <div className="flex justify-between text-sm">
-                <span>CGST (9%):</span>
-                <span className="font-medium">₹{(formData.totalAmount * 0.09).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                <span>CGST (2.5%):</span>
+                <span className="font-medium">₹{(formData.totalAmount * 0.025).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
               </div>
               <div className="flex justify-between text-sm">
-                <span>SGST (9%):</span>
-                <span className="font-medium">₹{(formData.totalAmount * 0.09).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                <span>SGST (2.5%):</span>
+                <span className="font-medium">₹{(formData.totalAmount * 0.025).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
               </div>
               <div className="border-t pt-2 flex justify-between font-bold text-lg">
                 <span>Total Billing Amount:</span>
-                <span className="text-primary">₹{(formData.totalAmount + (formData.totalAmount * 0.18)).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                <span className="text-primary">₹{(formData.totalAmount + (formData.totalAmount * 0.05)).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
               </div>
             </div>
           )}
@@ -371,9 +415,15 @@ function ViewBookingModal({ booking, isOpen, onClose }: ViewBookingModalProps) {
             <h4 className="font-medium text-sm mb-2">Customer Information</h4>
             <div className="space-y-1 text-sm">
               <p><strong>Name:</strong> {booking.customerName}</p>
+              {booking.customer2Name && (
+                <p><strong>Customer 2:</strong> {booking.customer2Name}</p>
+              )}
               <p><strong>Email:</strong> {booking.customerEmail}</p>
               <p><strong>Phone:</strong> {booking.customerPhone}</p>
               <p><strong>Aadhar:</strong> {booking.aadharNumber}</p>
+              {booking.customerGstNumber && (
+                <p><strong>GST No:</strong> <span className="font-mono text-xs">{booking.customerGstNumber}</span></p>
+              )}
             </div>
           </div>
 
@@ -395,16 +445,16 @@ function ViewBookingModal({ booking, isOpen, onClose }: ViewBookingModalProps) {
                 <span className="font-medium">₹{booking.totalAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
               </div>
               <div className="flex justify-between text-sm">
-                <span>CGST (9%):</span>
-                <span className="font-medium">₹{(booking.totalAmount * 0.09).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                <span>CGST (2.5%):</span>
+                <span className="font-medium">₹{(booking.totalAmount * 0.025).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
               </div>
               <div className="flex justify-between text-sm">
-                <span>SGST (9%):</span>
-                <span className="font-medium">₹{(booking.totalAmount * 0.09).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                <span>SGST (2.5%):</span>
+                <span className="font-medium">₹{(booking.totalAmount * 0.025).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
               </div>
               <div className="border-t pt-1 mt-1 flex justify-between font-bold">
                 <span>Total Billing Amount:</span>
-                <span className="text-primary">₹{(booking.totalAmount + (booking.totalAmount * 0.18)).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                <span className="text-primary">₹{(booking.totalAmount + (booking.totalAmount * 0.05)).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
               </div>
             </div>
           </div>
@@ -424,6 +474,8 @@ function EditBookingModal({ booking, isOpen, onClose }: EditBookingModalProps) {
     customerEmail: '',
     customerPhone: '',
     aadharNumber: '',
+    customer2Name: '',
+    customerGstNumber: '',
     roomNumber: '',
     checkIn: '',
     checkOut: '',
@@ -432,6 +484,7 @@ function EditBookingModal({ booking, isOpen, onClose }: EditBookingModalProps) {
     totalAmount: 0,
     status: 'confirmed',
   });
+  const [selectedRoomType, setSelectedRoomType] = useState('');
   
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -452,6 +505,8 @@ function EditBookingModal({ booking, isOpen, onClose }: EditBookingModalProps) {
         customerEmail: booking.customerEmail || '',
         customerPhone: booking.customerPhone || '',
         aadharNumber: booking.aadharNumber || '',
+        customer2Name: booking.customer2Name || '',
+        customerGstNumber: booking.customerGstNumber || '',
         roomNumber: booking.roomNumber || '',
         checkIn: booking.checkIn || '',
         checkOut: booking.checkOut || '',
@@ -460,6 +515,7 @@ function EditBookingModal({ booking, isOpen, onClose }: EditBookingModalProps) {
         totalAmount: booking.totalAmount || 0,
         status: booking.status || 'confirmed',
       });
+      setSelectedRoomType(booking.roomType || '');
     }
   }, [booking]);
 
@@ -471,8 +527,12 @@ function EditBookingModal({ booking, isOpen, onClose }: EditBookingModalProps) {
       const checkOutDate = new Date(formData.checkOut);
       const days = Math.ceil((checkOutDate.getTime() - checkInDate.getTime()) / (1000 * 60 * 60 * 24));
       const calculatedAmount = room.price * Math.max(1, days);
+      setSelectedRoomType(room.type);
       setFormData({ ...formData, roomNumber, totalAmount: calculatedAmount });
     } else {
+      if (room) {
+        setSelectedRoomType(room.type);
+      }
       setFormData({ ...formData, roomNumber });
     }
   };
@@ -530,6 +590,24 @@ function EditBookingModal({ booking, isOpen, onClose }: EditBookingModalProps) {
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-2">
+            <Label htmlFor="editRoomNumber">Room</Label>
+            <select
+              id="editRoomNumber"
+              value={formData.roomNumber}
+              onChange={(e) => handleRoomChange(e.target.value)}
+              className="room-select"
+              required
+            >
+              <option value="">Select room</option>
+              {rooms?.filter((room: Room) => room.status === 'available' || room.roomNumber === formData.roomNumber).map((room: Room) => (
+                <option key={room.id} value={room.roomNumber}>
+                  Room {room.roomNumber} - {room.type} (₹{room.price.toLocaleString()}/day)
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="space-y-2">
             <Label htmlFor="editCustomerName">Customer Name</Label>
             <Input
               id="editCustomerName"
@@ -539,25 +617,42 @@ function EditBookingModal({ booking, isOpen, onClose }: EditBookingModalProps) {
             />
           </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="editCustomerEmail">Customer Email</Label>
-            <Input
-              id="editCustomerEmail"
-              type="email"
-              value={formData.customerEmail}
-              readOnly
-              className="bg-muted"
-            />
-          </div>
+          {selectedRoomType && selectedRoomType.toLowerCase().includes('double') && (
+            <div className="space-y-2">
+              <Label htmlFor="editCustomer2Name">Customer 2 Name (Optional)</Label>
+              <Input
+                id="editCustomer2Name"
+                value={formData.customer2Name}
+                onChange={(e) => setFormData({ ...formData, customer2Name: e.target.value })}
+                placeholder="Enter second customer name (if applicable)"
+              />
+              <p className="text-xs text-muted-foreground">
+                Add second customer name for double occupancy. Useful if one customer leaves early.
+              </p>
+            </div>
+          )}
 
-          <div className="space-y-2">
-            <Label htmlFor="editCustomerPhone">Customer Phone</Label>
-            <Input
-              id="editCustomerPhone"
-              value={formData.customerPhone}
-              readOnly
-              className="bg-muted"
-            />
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label htmlFor="editCustomerEmail">Customer Email</Label>
+              <Input
+                id="editCustomerEmail"
+                type="email"
+                value={formData.customerEmail}
+                readOnly
+                className="bg-muted"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="editCustomerPhone">Customer Phone</Label>
+              <Input
+                id="editCustomerPhone"
+                value={formData.customerPhone}
+                readOnly
+                className="bg-muted"
+              />
+            </div>
           </div>
 
           <div className="space-y-2">
@@ -571,27 +666,25 @@ function EditBookingModal({ booking, isOpen, onClose }: EditBookingModalProps) {
           </div>
 
           <div className="space-y-2">
-            <Label>Room Selection</Label>
-            <div className="border rounded-lg p-2">
-              {rooms?.filter((room: Room) => room.status === 'available' || room.roomNumber === formData.roomNumber).map((room: Room) => (
-                <label key={room.id} className="flex items-center justify-between p-3 hover:bg-muted rounded cursor-pointer border-b last:border-b-0">
-                  <div className="flex items-center space-x-3">
-                    <input
-                      type="radio"
-                      name="roomNumber"
-                      value={room.roomNumber}
-                      checked={formData.roomNumber === room.roomNumber}
-                      onChange={(e) => handleRoomChange(e.target.value)}
-                      className="text-primary"
-                    />
-                    <div>
-                      <div className="font-medium">Room {room.roomNumber} - ₹{room.price.toLocaleString()}</div>
-                      <div className="text-sm text-muted-foreground">({room.type})</div>
-                    </div>
-                  </div>
-                </label>
-              ))}
-            </div>
+            <Label htmlFor="editCustomerGstNumber">GST Number (Optional)</Label>
+            <Input
+              id="editCustomerGstNumber"
+              value={formData.customerGstNumber}
+              onChange={(e) => {
+                const value = e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '');
+                if (value.length <= 15) {
+                  setFormData({ ...formData, customerGstNumber: value });
+                }
+              }}
+              placeholder="Enter 15-character GST number (if applicable)"
+              maxLength={15}
+            />
+            {formData.customerGstNumber && formData.customerGstNumber.length > 0 && formData.customerGstNumber.length !== 15 && (
+              <p className="text-sm text-yellow-600">GST number should be 15 characters</p>
+            )}
+            <p className="text-xs text-muted-foreground">
+              For business travelers who need GST invoice
+            </p>
           </div>
 
           <div className="grid grid-cols-2 gap-4">
@@ -666,16 +759,16 @@ function EditBookingModal({ booking, isOpen, onClose }: EditBookingModalProps) {
                 <span className="font-medium">₹{formData.totalAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
               </div>
               <div className="flex justify-between text-sm">
-                <span>CGST (9%):</span>
-                <span className="font-medium">₹{(formData.totalAmount * 0.09).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                <span>CGST (2.5%):</span>
+                <span className="font-medium">₹{(formData.totalAmount * 0.025).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
               </div>
               <div className="flex justify-between text-sm">
-                <span>SGST (9%):</span>
-                <span className="font-medium">₹{(formData.totalAmount * 0.09).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                <span>SGST (2.5%):</span>
+                <span className="font-medium">₹{(formData.totalAmount * 0.025).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
               </div>
               <div className="border-t pt-2 flex justify-between font-bold text-lg">
                 <span>Total Billing Amount:</span>
-                <span className="text-primary">₹{(formData.totalAmount + (formData.totalAmount * 0.18)).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                <span className="text-primary">₹{(formData.totalAmount + (formData.totalAmount * 0.05)).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
               </div>
             </div>
           )}
@@ -751,6 +844,8 @@ export default function Bookings() {
   const [viewingBooking, setViewingBooking] = useState<Booking | null>(null);
   const [editingBooking, setEditingBooking] = useState<Booking | null>(null);
   const [filter, setFilter] = useState<string>('');
+  const [selectedDate, setSelectedDate] = useState<Date>(new Date());
+  const [showAllBookings, setShowAllBookings] = useState(false);
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -787,9 +882,31 @@ export default function Bookings() {
     updateBookingStatusMutation.mutate({ id: bookingId, status: 'checked_out' });
   };
 
+  // Filter bookings by selected date
+  const filterBookingsByDate = (bookingsList: Booking[]) => {
+    if (showAllBookings) {
+      return bookingsList;
+    }
+    
+    const selectedDateStr = format(selectedDate, 'yyyy-MM-dd');
+    return bookingsList.filter((booking: Booking) => {
+      const checkInDate = booking.checkIn;
+      const checkOutDate = booking.checkOut;
+      // Show bookings where check-in or check-out matches the selected date
+      return checkInDate === selectedDateStr || checkOutDate === selectedDateStr;
+    });
+  };
+
+  // Sort bookings by creation date (newest first)
+  const sortedBookings = bookings ? [...bookings].sort((a: Booking, b: Booking) => {
+    const dateA = new Date(a.createdAt || 0).getTime();
+    const dateB = new Date(b.createdAt || 0).getTime();
+    return dateB - dateA; // Newest first
+  }) : [];
+
   const displayBookings = isCustomer 
-    ? bookings?.filter((booking: Booking) => booking.customerEmail === user?.email)
-    : bookings;
+    ? filterBookingsByDate(sortedBookings.filter((booking: Booking) => booking.customerEmail === user?.email))
+    : filterBookingsByDate(sortedBookings);
 
   if (isLoading) {
     return (
@@ -830,6 +947,96 @@ export default function Bookings() {
             </Button>
           )}
         </div>
+
+        {/* Compact Date Filter Bar */}
+        <Card className="bg-gradient-to-r from-blue-600 to-indigo-600 border-0 shadow-lg">
+          <CardContent className="p-4">
+            <div className="flex items-center justify-between gap-4 flex-wrap">
+              {/* Compact Date Display */}
+              <div className="flex items-center gap-4">
+                <div className="bg-white/20 backdrop-blur-sm rounded-lg px-4 py-2 border border-white/30 flex items-center gap-3">
+                  <div className="text-center">
+                    <div className="text-3xl font-bold text-white leading-none">
+                      {format(selectedDate, 'dd')}
+                    </div>
+                    <div className="text-xs text-white/80 uppercase">
+                      {format(selectedDate, 'MMM')}
+                    </div>
+                  </div>
+                  <div className="h-10 w-px bg-white/30"></div>
+                  <div>
+                    <div className="text-sm font-medium text-white/80">
+                      {format(selectedDate, 'EEEE')}
+                    </div>
+                    <div className="text-xs text-white/70">
+                      {format(selectedDate, 'yyyy')}
+                    </div>
+                  </div>
+                </div>
+                
+                <div className="bg-white/20 backdrop-blur-sm rounded-lg px-4 py-2 border border-white/30">
+                  <div className="text-xs text-white/80 mb-0.5">
+                    {showAllBookings ? 'All Bookings' : 'Today\'s Bookings'}
+                  </div>
+                  <div className="text-2xl font-bold text-white leading-none">
+                    {displayBookings?.length || 0}
+                  </div>
+                </div>
+              </div>
+              
+              {/* Compact Action Buttons */}
+              <div className="flex items-center gap-2">
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button 
+                      size="sm"
+                      className="bg-white text-blue-600 hover:bg-blue-50 font-semibold shadow-md"
+                    >
+                      <CalendarIcon className="h-4 w-4 mr-1" />
+                      Select Date
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto p-0" align="end">
+                    <Calendar
+                      mode="single"
+                      selected={selectedDate}
+                      onSelect={(date) => {
+                        if (date) {
+                          setSelectedDate(date);
+                          setShowAllBookings(false);
+                        }
+                      }}
+                      initialFocus
+                    />
+                  </PopoverContent>
+                </Popover>
+                
+                <Button 
+                  size="sm"
+                  onClick={() => setShowAllBookings(!showAllBookings)}
+                  className={`font-semibold shadow-md ${
+                    showAllBookings 
+                      ? 'bg-white text-blue-600 hover:bg-blue-50' 
+                      : 'bg-white/20 text-white border border-white/30 hover:bg-white/30'
+                  }`}
+                >
+                  {showAllBookings ? 'Today Only' : 'Show All'}
+                </Button>
+                
+                <Button 
+                  size="sm"
+                  onClick={() => {
+                    setSelectedDate(new Date());
+                    setShowAllBookings(false);
+                  }}
+                  className="bg-white/20 text-white border border-white/30 hover:bg-white/30 font-semibold shadow-md"
+                >
+                  Today
+                </Button>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
 
         {/* Filter Buttons */}
         {!isCustomer && (
@@ -928,7 +1135,7 @@ export default function Bookings() {
                     <div className="space-y-2">
                       <h4 className="font-medium text-sm">Total Billing Amount</h4>
                       <div className="text-lg font-bold text-primary">
-                        ₹{(booking.totalAmount + (booking.totalAmount * 0.18)).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        ₹{(booking.totalAmount + (booking.totalAmount * 0.05)).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                       </div>
                     </div>
                   </div>

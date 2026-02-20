@@ -14,6 +14,7 @@ import Reports from "./pages/Reports";
 import Billing from "./pages/Billing";
 import Expenses from "./pages/Expenses";
 import NotFound from "./pages/NotFound";
+import TestSupabase from "./pages/TestSupabase";
 
 const queryClient = new QueryClient();
 
@@ -28,6 +29,7 @@ const App = () => (
             <Route path="/" element={<Navigate to="/login" replace />} />
             <Route path="/login" element={<Login />} />
             <Route path="/register" element={<Register />} />
+            <Route path="/test" element={<TestSupabase />} />
             <Route
               path="/dashboard"
               element={

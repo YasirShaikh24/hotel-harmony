@@ -2,9 +2,9 @@ import { supabase } from '@/integrations/supabase/client';
 
 // Dashboard API
 export const dashboardApi = {
-  getStats: async () => {
+  getStats: async (date?: string) => {
     try {
-      const today = new Date().toISOString().split('T')[0];
+      const targetDate = date || new Date().toISOString().split('T')[0];
 
       const [roomsRes, bookingsRes] = await Promise.all([
         supabase.from('rooms').select('status'),
@@ -28,11 +28,11 @@ export const dashboardApi = {
       const occupiedRooms = roomsRes.data?.filter(r => r.status === 'occupied').length || 0;
       
       const todayCheckIns = bookingsRes.data?.filter(b => 
-        b.check_in === today && b.status === 'confirmed'
+        b.check_in === targetDate && b.status === 'confirmed'
       ).length || 0;
       
       const todayCheckOuts = bookingsRes.data?.filter(b => 
-        b.check_out === today && b.status === 'checked_in'
+        b.check_out === targetDate && b.status === 'checked_in'
       ).length || 0;
 
       const stats = {

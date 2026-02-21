@@ -785,13 +785,13 @@ export default function Billing() {
                         <Receipt className="h-6 w-6 text-primary-foreground" />
                       </div>
                       <div>
-                        <CardTitle className="text-lg">{invoice.id}</CardTitle>
+                        <CardTitle className="text-lg">Room {invoice.roomNumber} - {invoice.customerName}</CardTitle>
                         <div className="flex items-center gap-4 text-sm text-muted-foreground mt-1">
-                          <span>{invoice.customerName}</span>
-                          <span>•</span>
-                          <span>Room {invoice.roomNumber}</span>
+                          <span>{invoice.roomType}</span>
                           <span>•</span>
                           <span>{new Date(invoice.invoiceDate).toLocaleDateString()}</span>
+                          <span>•</span>
+                          <span className="font-mono text-xs">ID: {invoice.id.slice(0, 8)}</span>
                         </div>
                       </div>
                     </div>

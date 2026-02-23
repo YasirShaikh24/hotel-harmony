@@ -6,27 +6,9 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Wallet, Plus, Trash2, Calendar, IndianRupee, TrendingUp, TrendingDown, Receipt, CreditCard, Banknote, Building2, Smartphone } from 'lucide-react';
+import { Wallet, Plus, Trash2, Calendar, IndianRupee, TrendingUp, TrendingDown } from 'lucide-react';
 import { expensesApi, financialApi } from '@/services/api';
 import { useToast } from '@/hooks/use-toast';
-import { Badge } from '@/components/ui/badge';
-
-const EXPENSE_CATEGORIES = [
-  'Rent/Lease',
-  'Salaries & Wages',
-  'Utilities (Electricity, Water, Gas)',
-  'Maintenance & Repairs',
-  'Housekeeping Supplies',
-  'Food & Beverages',
-  'Marketing & Advertising',
-  'Insurance',
-  'Taxes & Licenses',
-  'Internet & Phone',
-  'Laundry Services',
-  'Security',
-  'Miscellaneous'
-];
 
 interface Expense {
   id: string;
@@ -34,9 +16,6 @@ interface Expense {
   amount: number;
   description: string;
   date: string;
-  paymentMethod?: string;
-  receiptNumber?: string;
-  vendorName?: string;
   createdAt: string;
 }
 
@@ -51,9 +30,6 @@ function AddExpenseModal({ isOpen, onClose }: AddExpenseModalProps) {
     amount: '',
     description: '',
     date: new Date().toISOString().split('T')[0],
-    paymentMethod: 'cash',
-    receiptNumber: '',
-    vendorName: '',
   });
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -72,9 +48,6 @@ function AddExpenseModal({ isOpen, onClose }: AddExpenseModalProps) {
         amount: '',
         description: '',
         date: new Date().toISOString().split('T')[0],
-        paymentMethod: 'cash',
-        receiptNumber: '',
-        vendorName: '',
       });
       onClose();
     },
@@ -97,7 +70,7 @@ function AddExpenseModal({ isOpen, onClose }: AddExpenseModalProps) {
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="sm:max-w-md max-h-[90vh] overflow-y-auto">
+      <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>Add New Expense</DialogTitle>
         </DialogHeader>
@@ -115,31 +88,12 @@ function AddExpenseModal({ isOpen, onClose }: AddExpenseModalProps) {
 
           <div className="space-y-2">
             <Label htmlFor="category">Category</Label>
-            <Select
-              value={formData.category}
-              onValueChange={(value) => setFormData({ ...formData, category: value })}
-              required
-            >
-              <SelectTrigger>
-                <SelectValue placeholder="Select category" />
-              </SelectTrigger>
-              <SelectContent>
-                {EXPENSE_CATEGORIES.map((category) => (
-                  <SelectItem key={category} value={category}>
-                    {category}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="vendorName">Vendor/Service Provider (Optional)</Label>
             <Input
-              id="vendorName"
-              value={formData.vendorName}
-              onChange={(e) => setFormData({ ...formData, vendorName: e.target.value })}
-              placeholder="e.g., ABC Electricals, XYZ Services"
+              id="category"
+              value={formData.category}
+              onChange={(e) => setFormData({ ...formData, category: e.target.value })}
+              placeholder="e.g., Utilities, Maintenance, Salaries"
+              required
             />
           </div>
 
@@ -149,7 +103,7 @@ function AddExpenseModal({ isOpen, onClose }: AddExpenseModalProps) {
               id="description"
               value={formData.description}
               onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-              placeholder="e.g., Monthly electricity bill, AC repair for Room 105"
+              placeholder="Brief description of the expense"
               required
             />
           </div>
@@ -165,78 +119,6 @@ function AddExpenseModal({ isOpen, onClose }: AddExpenseModalProps) {
               onChange={(e) => setFormData({ ...formData, amount: e.target.value })}
               placeholder="0.00"
               required
-            />
-          </div>
-
-          <div className="space-y-2">
-            <Label>Payment Method</Label>
-            <div className="grid grid-cols-2 gap-3">
-              <label className={`flex items-center gap-2 p-3 border-2 rounded-lg cursor-pointer transition-all ${
-                formData.paymentMethod === 'cash' ? 'border-green-500 bg-green-50' : 'border-gray-200 hover:border-gray-300'
-              }`}>
-                <input
-                  type="radio"
-                  name="paymentMethod"
-                  value="cash"
-                  checked={formData.paymentMethod === 'cash'}
-                  onChange={(e) => setFormData({ ...formData, paymentMethod: e.target.value })}
-                  className="w-4 h-4"
-                />
-                <Banknote className="h-5 w-5 text-green-600" />
-                <span className="font-medium">Cash</span>
-              </label>
-              <label className={`flex items-center gap-2 p-3 border-2 rounded-lg cursor-pointer transition-all ${
-                formData.paymentMethod === 'bank' ? 'border-blue-500 bg-blue-50' : 'border-gray-200 hover:border-gray-300'
-              }`}>
-                <input
-                  type="radio"
-                  name="paymentMethod"
-                  value="bank"
-                  checked={formData.paymentMethod === 'bank'}
-                  onChange={(e) => setFormData({ ...formData, paymentMethod: e.target.value })}
-                  className="w-4 h-4"
-                />
-                <Building2 className="h-5 w-5 text-blue-600" />
-                <span className="font-medium">Bank</span>
-              </label>
-              <label className={`flex items-center gap-2 p-3 border-2 rounded-lg cursor-pointer transition-all ${
-                formData.paymentMethod === 'card' ? 'border-purple-500 bg-purple-50' : 'border-gray-200 hover:border-gray-300'
-              }`}>
-                <input
-                  type="radio"
-                  name="paymentMethod"
-                  value="card"
-                  checked={formData.paymentMethod === 'card'}
-                  onChange={(e) => setFormData({ ...formData, paymentMethod: e.target.value })}
-                  className="w-4 h-4"
-                />
-                <CreditCard className="h-5 w-5 text-purple-600" />
-                <span className="font-medium">Card</span>
-              </label>
-              <label className={`flex items-center gap-2 p-3 border-2 rounded-lg cursor-pointer transition-all ${
-                formData.paymentMethod === 'upi' ? 'border-orange-500 bg-orange-50' : 'border-gray-200 hover:border-gray-300'
-              }`}>
-                <input
-                  type="radio"
-                  name="paymentMethod"
-                  value="upi"
-                  checked={formData.paymentMethod === 'upi'}
-                  onChange={(e) => setFormData({ ...formData, paymentMethod: e.target.value })}
-                  className="w-4 h-4"
-                />
-                <Smartphone className="h-5 w-5 text-orange-600" />
-                <span className="font-medium">UPI</span>
-              </label>
-            </div>
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="receiptNumber">Receipt/Invoice Number (Optional)</Label>
-            <Input
-              id="receiptNumber"
-              value={formData.receiptNumber}
-              onChange={(e) => setFormData({ ...formData, receiptNumber: e.target.value })}
-              placeholder="e.g., INV-2024-001"
             />
           </div>
 
@@ -257,7 +139,6 @@ function AddExpenseModal({ isOpen, onClose }: AddExpenseModalProps) {
 export default function Expenses() {
   const [isAddExpenseModalOpen, setIsAddExpenseModalOpen] = useState(false);
   const [timePeriod, setTimePeriod] = useState<'daily' | 'monthly' | 'yearly' | ''>('monthly');
-  const [categoryFilter, setCategoryFilter] = useState<string>('');
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -296,38 +177,7 @@ export default function Expenses() {
     }
   };
 
-  const getPaymentMethodIcon = (method?: string) => {
-    switch (method) {
-      case 'cash':
-        return <Banknote className="h-4 w-4 text-green-600" />;
-      case 'bank':
-        return <Building2 className="h-4 w-4 text-blue-600" />;
-      case 'card':
-        return <CreditCard className="h-4 w-4 text-purple-600" />;
-      case 'upi':
-        return <Smartphone className="h-4 w-4 text-orange-600" />;
-      default:
-        return <Wallet className="h-4 w-4 text-gray-600" />;
-    }
-  };
-
-  const getPaymentMethodLabel = (method?: string) => {
-    return method ? method.charAt(0).toUpperCase() + method.slice(1) : 'N/A';
-  };
-
-  // Filter expenses by category
-  const filteredExpenses = categoryFilter
-    ? expenses?.filter((exp: Expense) => exp.category === categoryFilter)
-    : expenses;
-
-  // Calculate category-wise totals
-  const categoryTotals = expenses?.reduce((acc: Record<string, number>, exp: Expense) => {
-    acc[exp.category] = (acc[exp.category] || 0) + exp.amount;
-    return acc;
-  }, {});
-
-  const totalExpenses = filteredExpenses?.reduce((sum: number, expense: Expense) => sum + expense.amount, 0) || 0;
-
+  const totalExpenses = expenses?.reduce((sum: number, expense: Expense) => sum + expense.amount, 0) || 0;
   const isLoading = expensesLoading || summaryLoading;
 
   return (
@@ -442,40 +292,11 @@ export default function Expenses() {
           </div>
         )}
 
-        {/* Category Filter */}
-        <Card className="bg-gradient-to-r from-purple-50 to-pink-50 border-purple-200">
-          <CardContent className="p-4">
-            <div className="flex items-center gap-4">
-              <Label className="text-sm font-medium whitespace-nowrap">Filter by Category:</Label>
-              <Select value={categoryFilter || 'all'} onValueChange={(value) => setCategoryFilter(value === 'all' ? '' : value)}>
-                <SelectTrigger className="w-full sm:w-64">
-                  <SelectValue placeholder="All Categories" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Categories</SelectItem>
-                  {EXPENSE_CATEGORIES.map((category) => (
-                    <SelectItem key={category} value={category}>
-                      {category} {categoryTotals?.[category] ? `(₹${categoryTotals[category].toLocaleString()})` : ''}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              {categoryFilter && (
-                <Button variant="outline" size="sm" onClick={() => setCategoryFilter('')}>
-                  Clear
-                </Button>
-              )}
-            </div>
-          </CardContent>
-        </Card>
-
         {/* Expenses List */}
         <Card>
           <CardHeader>
             <div className="flex items-center justify-between">
-              <CardTitle>
-                {categoryFilter ? `${categoryFilter} Expenses` : 'All Expenses'} ({filteredExpenses?.length || 0})
-              </CardTitle>
+              <CardTitle>All Expenses ({expenses?.length || 0})</CardTitle>
               <div className="text-right">
                 <p className="text-sm text-muted-foreground">Total</p>
                 <p className="text-2xl font-bold text-red-600">₹{totalExpenses.toLocaleString()}</p>
@@ -488,15 +309,12 @@ export default function Expenses() {
                 <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto"></div>
                 <p className="mt-4 text-muted-foreground">Loading expenses...</p>
               </div>
-            ) : filteredExpenses?.length === 0 ? (
+            ) : expenses?.length === 0 ? (
               <div className="text-center py-12">
                 <Wallet className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
                 <h3 className="text-lg font-medium mb-2">No expenses found</h3>
                 <p className="text-muted-foreground mb-4">
-                  {categoryFilter 
-                    ? `No expenses in ${categoryFilter} category`
-                    : 'Start by adding your first expense record'
-                  }
+                  Start by adding your first expense record
                 </p>
                 <Button onClick={() => setIsAddExpenseModalOpen(true)}>
                   <Plus className="h-4 w-4 mr-2" />
@@ -505,7 +323,7 @@ export default function Expenses() {
               </div>
             ) : (
               <div className="space-y-3">
-                {filteredExpenses?.map((expense: Expense) => (
+                {expenses?.map((expense: Expense) => (
                   <Card key={expense.id} className="hover:shadow-md transition-shadow border-l-4 border-l-red-500">
                     <CardContent className="p-4">
                       <div className="flex items-start justify-between gap-4">
@@ -515,39 +333,20 @@ export default function Expenses() {
                               <Wallet className="h-5 w-5 text-red-600" />
                             </div>
                             <div className="flex-1">
-                              <div className="flex items-center gap-2 flex-wrap">
-                                <h3 className="font-semibold text-gray-900">{expense.category}</h3>
-                                <Badge variant="outline" className="text-xs">
-                                  {new Date(expense.date).toLocaleDateString('en-IN', { 
-                                    day: '2-digit', 
-                                    month: 'short', 
-                                    year: 'numeric' 
-                                  })}
-                                </Badge>
-                              </div>
+                              <h3 className="font-semibold text-gray-900">{expense.category}</h3>
                               <p className="text-sm text-gray-600 mt-1">{expense.description}</p>
                             </div>
                           </div>
                           
-                          <div className="ml-13 space-y-2">
-                            {expense.vendorName && (
-                              <div className="flex items-center gap-2 text-sm text-gray-600">
-                                <Receipt className="h-4 w-4" />
-                                <span>Vendor: {expense.vendorName}</span>
-                              </div>
-                            )}
-                            <div className="flex items-center gap-4 flex-wrap text-sm">
-                              <div className="flex items-center gap-2 text-gray-600">
-                                {getPaymentMethodIcon(expense.paymentMethod)}
-                                <span>{getPaymentMethodLabel(expense.paymentMethod)}</span>
-                              </div>
-                              {expense.receiptNumber && (
-                                <div className="flex items-center gap-2 text-gray-600">
-                                  <Receipt className="h-4 w-4" />
-                                  <span>Receipt: {expense.receiptNumber}</span>
-                                </div>
-                              )}
-                            </div>
+                          <div className="ml-13 flex items-center gap-2 text-sm text-gray-600">
+                            <Calendar className="h-4 w-4" />
+                            <span>
+                              {new Date(expense.date).toLocaleDateString('en-IN', { 
+                                day: '2-digit', 
+                                month: 'short', 
+                                year: 'numeric' 
+                              })}
+                            </span>
                           </div>
                         </div>
                         

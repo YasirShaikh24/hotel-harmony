@@ -30,6 +30,7 @@ const navItems: NavItem[] = [
   { icon: LayoutDashboard, label: 'Dashboard', href: '/dashboard', roles: ['admin', 'receptionist', 'customer'] },
   { icon: BedDouble, label: 'Rooms', href: '/rooms', roles: ['admin', 'receptionist'] },
   { icon: CalendarCheck, label: 'Bookings', href: '/bookings', roles: ['admin', 'receptionist', 'customer'] },
+  { icon: Users, label: 'Customers', href: '/customers', roles: ['admin', 'receptionist'] },
   { icon: Receipt, label: 'Billing', href: '/billing', roles: ['admin', 'receptionist', 'customer'] },
   { icon: TrendingUp, label: 'Reports', href: '/reports', roles: ['admin'] },
   { icon: Wallet, label: 'Expenses', href: '/expenses', roles: ['admin'] },

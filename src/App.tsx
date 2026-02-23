@@ -14,6 +14,7 @@ import Bookings from "./pages/Bookings";
 import Reports from "./pages/Reports";
 import Billing from "./pages/Billing";
 import Expenses from "./pages/Expenses";
+import Customers from "./pages/Customers";
 import NotFound from "./pages/NotFound";
 import TestSupabase from "./pages/TestSupabase";
 
@@ -68,7 +69,7 @@ const App = () => (
               path="/customers"
               element={
                 <ProtectedRoute allowedRoles={['admin', 'receptionist']}>
-                  <Dashboard />
+                  <Customers />
                 </ProtectedRoute>
               }
             />

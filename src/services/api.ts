@@ -662,3 +662,115 @@ export const financialApi = {
     };
   },
 };
+
+// Customers API
+export const customersApi = {
+  getAll: async (searchQuery?: string) => {
+    let query = supabase
+      .from('customers')
+      .select(`
+        *,
+        bookings(
+          id,
+          check_out,
+          invoices(total)
+        )
+      `)
+      .order('created_at', { ascending: false });
+    
+    if (searchQuery) {
+      query = query.or(`name.ilike.%${searchQuery}%,mobile.ilike.%${searchQuery}%,email.ilike.%${searchQuery}%`);
+    }
+    
+    const { data, error } = await query;
+    if (error) throw error;
+    
+    return data.map(customer => {
+      const bookings = customer.bookings || [];
+      const totalStays = bookings.length;
+      const totalRevenue = bookings.reduce((sum: number, booking: any) => {
+        const invoiceTotal = booking.invoices?.[0]?.total || 0;
+        return sum + parseFloat(invoiceTotal);
+      }, 0);
+      const lastStay = bookings.length > 0 
+        ? bookings.reduce((latest: string, booking: any) => {
+            return booking.check_out > latest ? booking.check_out : latest;
+          }, bookings[0].check_out)
+        : null;
+      
+      return {
+        id: customer.id,
+        name: customer.name,
+        phone: customer.mobile,
+        email: customer.email,
+        aadhar: customer.aadhar_encrypted,
+        address: customer.address,
+        totalStays,
+        totalRevenue,
+        lastStay,
+        createdAt: customer.created_at,
+      };
+    });
+  },
+  
+  getById: async (id: string) => {
+    const { data: customer, error: customerError } = await supabase
+      .from('customers')
+      .select('*')
+      .eq('id', id)
+      .single();
+    
+    if (customerError) throw customerError;
+    
+    const { data: bookings, error: bookingsError } = await supabase
+      .from('bookings')
+      .select(`
+        *,
+        room:rooms(*),
+        invoices(*)
+      `)
+      .eq('customer_id', id)
+      .order('check_in', { ascending: false });
+    
+    if (bookingsError) throw bookingsError;
+    
+    const typeMap: Record<string, string> = {
+      'single': 'Single AC',
+      'double': 'Double AC',
+      'deluxe': 'Deluxe',
+      'suite': 'Suite',
+      'presidential': 'Presidential'
+    };
+    
+    const totalStays = bookings.length;
+    const totalRevenue = bookings.reduce((sum, booking) => {
+      const invoiceTotal = booking.invoices?.[0]?.total || 0;
+      return sum + parseFloat(invoiceTotal);
+    }, 0);
+    const lastStay = bookings.length > 0 ? bookings[0].check_out : null;
+    
+    return {
+      id: customer.id,
+      name: customer.name,
+      phone: customer.mobile,
+      email: customer.email,
+      aadhar: customer.aadhar_encrypted,
+      address: customer.address,
+      totalStays,
+      totalRevenue,
+      lastStay,
+      createdAt: customer.created_at,
+      bookings: bookings.map(booking => ({
+        id: booking.id,
+        roomNumber: booking.room?.room_number,
+        roomType: typeMap[booking.room?.type] || booking.room?.type,
+        checkIn: booking.check_in,
+        checkOut: booking.check_out,
+        status: booking.status,
+        adults: booking.adults,
+        children: booking.children,
+        amount: booking.invoices?.[0]?.total ? parseFloat(booking.invoices[0].total) : 0,
+      })),
+    };
+  },
+};

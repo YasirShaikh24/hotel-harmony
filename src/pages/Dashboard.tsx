@@ -35,7 +35,7 @@ export default function Dashboard() {
         </div>
 
         {/* Compact Date Filter Bar */}
-        <Card className="bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-600 border-0 shadow-lg">
+        <Card className="bg-[#2c4a6b] border-0 shadow-lg">
           <CardContent className="p-4">
             <div className="flex items-center justify-between gap-4 flex-wrap">
               {/* Compact Date Display */}
@@ -76,7 +76,7 @@ export default function Dashboard() {
                   <PopoverTrigger asChild>
                     <Button 
                       size="sm"
-                      className="bg-white text-purple-600 hover:bg-purple-50 font-semibold shadow-md"
+                      className="bg-white text-[#2c4a6b] hover:bg-blue-50 font-semibold shadow-md"
                     >
                       <CalendarIcon className="h-4 w-4 mr-1" />
                       Select Date
@@ -102,7 +102,7 @@ export default function Dashboard() {
                   onClick={() => setShowAllData(!showAllData)}
                   className={`font-semibold shadow-md ${
                     showAllData 
-                      ? 'bg-white text-purple-600 hover:bg-purple-50' 
+                      ? 'bg-white text-[#2c4a6b] hover:bg-blue-50' 
                       : 'bg-white/20 text-white border border-white/30 hover:bg-white/30'
                   }`}
                 >

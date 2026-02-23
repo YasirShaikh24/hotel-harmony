@@ -7,7 +7,8 @@ import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Calendar } from '@/components/ui/calendar';
-import { Receipt, Download, Eye, CreditCard, Clock, CheckCircle, MessageCircle, CalendarIcon } from 'lucide-react';
+import { Label } from '@/components/ui/label';
+import { Receipt, Download, Eye, CreditCard, Clock, CheckCircle, MessageCircle, CalendarIcon, ChevronDown, ChevronUp } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { invoicesApi } from '@/services/api';
 import { useToast } from '@/hooks/use-toast';
@@ -39,6 +40,12 @@ interface Invoice {
 }
 
 interface ViewInvoiceModalProps {
+  invoice: Invoice | null;
+  isOpen: boolean;
+  onClose: () => void;
+}
+
+interface PaymentModalProps {
   invoice: Invoice | null;
   isOpen: boolean;
   onClose: () => void;
@@ -210,12 +217,144 @@ function ViewInvoiceModal({ invoice, isOpen, onClose }: ViewInvoiceModalProps) {
   );
 }
 
+function PaymentModal({ invoice, isOpen, onClose }: PaymentModalProps) {
+  const [paymentMethod, setPaymentMethod] = useState<'Cash' | 'GPay'>('Cash');
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+
+  const updatePaymentMutation = useMutation({
+    mutationFn: ({ id, status, method }: { id: string; status: string; method: string }) => 
+      invoicesApi.update(id, { paymentStatus: status, paymentMethod: method }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['invoices'] });
+      toast({
+        title: 'Success',
+        description: 'Payment recorded successfully',
+      });
+      onClose();
+    },
+    onError: () => {
+      toast({
+        title: 'Error',
+        description: 'Failed to record payment',
+        variant: 'destructive',
+      });
+    },
+  });
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (invoice) {
+      updatePaymentMutation.mutate({ 
+        id: invoice.id, 
+        status: 'paid', 
+        method: paymentMethod 
+      });
+    }
+  };
+
+  if (!invoice) return null;
+
+  return (
+    <Dialog open={isOpen} onOpenChange={onClose}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>Record Payment</DialogTitle>
+        </DialogHeader>
+        <form onSubmit={handleSubmit} className="space-y-6">
+          <div className="space-y-4">
+            <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
+              <div className="flex justify-between items-center">
+                <span className="text-sm font-medium text-gray-700">Invoice Amount:</span>
+                <span className="text-2xl font-bold text-blue-600">
+                  ₹{invoice.total.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </span>
+              </div>
+              <div className="mt-2 text-xs text-gray-600">
+                Invoice: {invoice.id} | Room {invoice.roomNumber}
+              </div>
+            </div>
+
+            <div className="space-y-3">
+              <Label className="text-base font-semibold">Select Payment Method</Label>
+              <div className="space-y-3">
+                <label className="flex items-center p-4 border-2 rounded-lg cursor-pointer transition-all hover:bg-gray-50"
+                  style={{
+                    borderColor: paymentMethod === 'Cash' ? '#2563eb' : '#e5e7eb',
+                    backgroundColor: paymentMethod === 'Cash' ? '#eff6ff' : 'white'
+                  }}>
+                  <input
+                    type="radio"
+                    name="paymentMethod"
+                    value="Cash"
+                    checked={paymentMethod === 'Cash'}
+                    onChange={(e) => setPaymentMethod(e.target.value as 'Cash' | 'GPay')}
+                    className="w-5 h-5 text-blue-600"
+                  />
+                  <div className="ml-3 flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-full bg-green-100 flex items-center justify-center">
+                      <span className="text-xl">💵</span>
+                    </div>
+                    <div>
+                      <span className="font-semibold text-gray-900">Cash Payment</span>
+                      <p className="text-xs text-gray-600">Physical currency payment</p>
+                    </div>
+                  </div>
+                </label>
+
+                <label className="flex items-center p-4 border-2 rounded-lg cursor-pointer transition-all hover:bg-gray-50"
+                  style={{
+                    borderColor: paymentMethod === 'GPay' ? '#2563eb' : '#e5e7eb',
+                    backgroundColor: paymentMethod === 'GPay' ? '#eff6ff' : 'white'
+                  }}>
+                  <input
+                    type="radio"
+                    name="paymentMethod"
+                    value="GPay"
+                    checked={paymentMethod === 'GPay'}
+                    onChange={(e) => setPaymentMethod(e.target.value as 'Cash' | 'GPay')}
+                    className="w-5 h-5 text-blue-600"
+                  />
+                  <div className="ml-3 flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center">
+                      <span className="text-xl">📱</span>
+                    </div>
+                    <div>
+                      <span className="font-semibold text-gray-900">GPay / UPI</span>
+                      <p className="text-xs text-gray-600">Digital payment via UPI</p>
+                    </div>
+                  </div>
+                </label>
+              </div>
+            </div>
+          </div>
+
+          <div className="flex gap-2 pt-4">
+            <Button 
+              type="submit" 
+              disabled={updatePaymentMutation.isPending} 
+              className="flex-1 bg-green-600 hover:bg-green-700"
+            >
+              {updatePaymentMutation.isPending ? 'Recording...' : 'Confirm Payment'}
+            </Button>
+            <Button type="button" variant="outline" onClick={onClose}>
+              Cancel
+            </Button>
+          </div>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 export default function Billing() {
   const { user, isCustomer } = useAuth();
   const [filter, setFilter] = useState<string>('');
   const [viewingInvoice, setViewingInvoice] = useState<Invoice | null>(null);
+  const [paymentInvoice, setPaymentInvoice] = useState<Invoice | null>(null);
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
   const [showAllInvoices, setShowAllInvoices] = useState(false);
+  const [expandedCards, setExpandedCards] = useState<string[]>([]);
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -223,6 +362,14 @@ export default function Billing() {
     queryKey: ['invoices', filter],
     queryFn: () => invoicesApi.getAll(filter),
   });
+
+  const toggleCard = (invoiceId: string) => {
+    setExpandedCards(prev => 
+      prev.includes(invoiceId) 
+        ? prev.filter(id => id !== invoiceId)
+        : [...prev, invoiceId]
+    );
+  };
 
   const updatePaymentStatusMutation = useMutation({
     mutationFn: ({ id, status }: { id: string; status: string }) => 
@@ -609,8 +756,8 @@ export default function Billing() {
     }
   };
 
-  const handleMarkAsPaid = (invoiceId: string) => {
-    updatePaymentStatusMutation.mutate({ id: invoiceId, status: 'paid' });
+  const handleMarkAsPaid = (invoice: Invoice) => {
+    setPaymentInvoice(invoice);
   };
 
   if (isLoading) {
@@ -645,7 +792,7 @@ export default function Billing() {
         </div>
 
         {/* Compact Date Filter Bar */}
-        <Card className="bg-gradient-to-r from-blue-600 to-indigo-600 border-0 shadow-lg">
+        <Card className="bg-[#2c4a6b] border-0 shadow-lg">
           <CardContent className="p-4">
             <div className="flex items-center justify-between gap-4 flex-wrap">
               {/* Compact Date Display */}
@@ -686,7 +833,7 @@ export default function Billing() {
                   <PopoverTrigger asChild>
                     <Button 
                       size="sm"
-                      className="bg-white text-blue-600 hover:bg-blue-50 font-semibold shadow-md"
+                      className="bg-white text-[#2c4a6b] hover:bg-blue-50 font-semibold shadow-md"
                     >
                       <CalendarIcon className="h-4 w-4 mr-1" />
                       Select Date
@@ -712,7 +859,7 @@ export default function Billing() {
                   onClick={() => setShowAllInvoices(!showAllInvoices)}
                   className={`font-semibold shadow-md ${
                     showAllInvoices 
-                      ? 'bg-white text-blue-600 hover:bg-blue-50' 
+                      ? 'bg-white text-[#2c4a6b] hover:bg-blue-50' 
                       : 'bg-white/20 text-white border border-white/30 hover:bg-white/30'
                   }`}
                 >
@@ -776,116 +923,211 @@ export default function Billing() {
               </CardContent>
             </Card>
           ) : (
-            displayInvoices?.map((invoice: Invoice) => (
-              <Card key={invoice.id} className="hover:shadow-lg transition-shadow">
-                <CardHeader className="pb-3">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <div className="w-12 h-12 rounded-full bg-gradient-primary flex items-center justify-center">
-                        <Receipt className="h-6 w-6 text-primary-foreground" />
-                      </div>
-                      <div>
-                        <CardTitle className="text-lg">Room {invoice.roomNumber} - {invoice.customerName}</CardTitle>
-                        <div className="flex items-center gap-4 text-sm text-muted-foreground mt-1">
-                          <span>{invoice.roomType}</span>
-                          <span>•</span>
-                          <span>{new Date(invoice.invoiceDate).toLocaleDateString()}</span>
-                          <span>•</span>
-                          <span className="font-mono text-xs">ID: {invoice.id.slice(0, 8)}</span>
+            displayInvoices?.map((invoice: Invoice) => {
+              const isExpanded = expandedCards.includes(invoice.id);
+              
+              return (
+                <Card key={invoice.id} className="hover:shadow-lg transition-shadow">
+                  <CardHeader className="pb-3">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <div className="w-12 h-12 rounded-full bg-gradient-primary flex items-center justify-center">
+                          <Receipt className="h-6 w-6 text-primary-foreground" />
+                        </div>
+                        <div>
+                          <CardTitle className="text-lg">Room {invoice.roomNumber} - {invoice.customerName}</CardTitle>
+                          <div className="flex items-center gap-4 text-sm text-muted-foreground mt-1">
+                            <span>Invoice: {invoice.id.slice(0, 8)}</span>
+                            <span>•</span>
+                            <span>{new Date(invoice.invoiceDate).toLocaleDateString()}</span>
+                          </div>
                         </div>
                       </div>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <Badge className={getPaymentStatusColor(invoice.paymentStatus)}>
-                        <div className="flex items-center gap-1">
-                          {getPaymentStatusIcon(invoice.paymentStatus)}
-                          {invoice.paymentStatus.charAt(0).toUpperCase() + invoice.paymentStatus.slice(1)}
-                        </div>
-                      </Badge>
-                    </div>
-                  </div>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <div className="space-y-2">
-                      <h4 className="font-medium text-sm">Stay Details</h4>
-                      <div className="text-sm text-muted-foreground">
-                        <p>Check-in: {new Date(invoice.checkIn).toLocaleDateString()}</p>
-                        <p>Check-out: {new Date(invoice.checkOut).toLocaleDateString()}</p>
-                        <p>Duration: {invoice.days} nights</p>
+                      <div className="flex items-center gap-2">
+                        <Badge className={getPaymentStatusColor(invoice.paymentStatus)}>
+                          <div className="flex items-center gap-1">
+                            {getPaymentStatusIcon(invoice.paymentStatus)}
+                            {invoice.paymentStatus.charAt(0).toUpperCase() + invoice.paymentStatus.slice(1)}
+                          </div>
+                        </Badge>
                       </div>
                     </div>
-                    
-                    <div className="space-y-2">
-                      <h4 className="font-medium text-sm">Charges Breakdown</h4>
-                      <div className="text-sm text-muted-foreground">
-                        <p>Room Charges: ₹{invoice.roomCharges.toLocaleString()}</p>
-                        <p>Additional: ₹{invoice.additionalCharges.toLocaleString()}</p>
-                        <p>CGST: ₹{invoice.cgst.toLocaleString()}</p>
-                        <p>SGST: ₹{invoice.sgst.toLocaleString()}</p>
-                      </div>
-                    </div>
-                    
-                    <div className="space-y-2">
-                      <h4 className="font-medium text-sm">Payment Info</h4>
-                      <div className="text-lg font-bold text-primary">
-                        ₹{invoice.total.toLocaleString()}
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    {/* Collapsed View - Always Visible */}
+                    <div className="flex items-center justify-between">
+                      <div className="text-lg">
+                        <span className="text-muted-foreground">Total: </span>
+                        <span className="font-bold text-primary">₹{invoice.total.toLocaleString()}</span>
                       </div>
                       {invoice.paymentMethod && (
-                        <div className="flex items-center gap-1 text-sm text-muted-foreground">
+                        <div className="flex items-center gap-2 text-sm text-muted-foreground">
                           <CreditCard className="h-4 w-4" />
-                          <span>{invoice.paymentMethod}</span>
+                          <span>via {invoice.paymentMethod}</span>
                         </div>
                       )}
                     </div>
-                  </div>
 
-                  <div className="flex gap-2 pt-2 flex-wrap">
-                    <Button 
-                      variant="outline" 
-                      size="sm"
-                      onClick={() => setViewingInvoice(invoice)}
-                    >
-                      <Eye className="h-4 w-4 mr-1" />
-                      View Invoice
-                    </Button>
-                    <Button 
-                      variant="outline" 
-                      size="sm"
-                      onClick={() => handleDownloadPdf(invoice)}
-                    >
-                      <Download className="h-4 w-4 mr-1" />
-                      Download PDF
-                    </Button>
-                    <Button 
-                      variant="outline" 
-                      size="sm"
-                      onClick={() => handleShareWhatsApp(invoice)}
-                    >
-                      <MessageCircle className="h-4 w-4 mr-1" />
-                      Share WhatsApp
-                    </Button>
-                    {invoice.paymentStatus === 'pending' && !isCustomer && (
+                    {/* Expanded View - Conditional */}
+                    {isExpanded && (
+                      <div className="space-y-4 pt-4 border-t animate-in fade-in duration-200">
+                        {/* Guest Information */}
+                        <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
+                          <h4 className="font-semibold text-blue-700 mb-3 text-sm">Guest Information</h4>
+                          <div className="space-y-2 text-sm">
+                            <div className="flex">
+                              <span className="font-medium text-gray-700 w-20">Name:</span>
+                              <span className="text-gray-900">{invoice.customerName}</span>
+                            </div>
+                            {invoice.customer2Name && (
+                              <div className="flex">
+                                <span className="font-medium text-gray-700 w-20">Guest 2:</span>
+                                <span className="text-gray-900">{invoice.customer2Name}</span>
+                              </div>
+                            )}
+                            <div className="flex">
+                              <span className="font-medium text-gray-700 w-20">Email:</span>
+                              <span className="text-gray-900 break-all">{invoice.customerEmail}</span>
+                            </div>
+                            <div className="flex">
+                              <span className="font-medium text-gray-700 w-20">Phone:</span>
+                              <span className="text-gray-900">{invoice.customerPhone}</span>
+                            </div>
+                            {invoice.customerGstNumber && (
+                              <div className="flex">
+                                <span className="font-medium text-gray-700 w-20">GST No:</span>
+                                <span className="text-gray-900 font-mono text-xs">{invoice.customerGstNumber}</span>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Stay Details */}
+                        <div className="bg-green-50 p-4 rounded-lg border border-green-200">
+                          <h4 className="font-semibold text-green-700 mb-3 text-sm">Stay Details</h4>
+                          <div className="space-y-2 text-sm">
+                            <div className="flex">
+                              <span className="font-medium text-gray-700 w-24">Room:</span>
+                              <span className="text-gray-900">{invoice.roomNumber} - {invoice.roomType}</span>
+                            </div>
+                            <div className="flex">
+                              <span className="font-medium text-gray-700 w-24">Check-in:</span>
+                              <span className="text-gray-900">{new Date(invoice.checkIn).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}</span>
+                            </div>
+                            <div className="flex">
+                              <span className="font-medium text-gray-700 w-24">Check-out:</span>
+                              <span className="text-gray-900">{new Date(invoice.checkOut).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}</span>
+                            </div>
+                            <div className="flex">
+                              <span className="font-medium text-gray-700 w-24">Duration:</span>
+                              <span className="text-gray-900 font-semibold">{invoice.days} night{invoice.days > 1 ? 's' : ''}</span>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Charges Breakdown */}
+                        <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
+                          <h4 className="font-semibold text-gray-700 mb-3 text-sm">Charges Breakdown</h4>
+                          <div className="space-y-2 text-sm">
+                            <div className="flex justify-between">
+                              <span className="text-gray-700">Room Charges ({invoice.days} night{invoice.days > 1 ? 's' : ''}):</span>
+                              <span className="font-medium text-gray-900">₹{invoice.roomCharges.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span className="text-gray-700">Additional Charges:</span>
+                              <span className="font-medium text-gray-900">₹{invoice.additionalCharges.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                            </div>
+                            <div className="flex justify-between text-xs">
+                              <span className="text-gray-600">CGST (2.5%):</span>
+                              <span className="text-gray-800">₹{invoice.cgst.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                            </div>
+                            <div className="flex justify-between text-xs">
+                              <span className="text-gray-600">SGST (2.5%):</span>
+                              <span className="text-gray-800">₹{invoice.sgst.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                            </div>
+                            <div className="border-t pt-2 mt-2 flex justify-between">
+                              <span className="font-bold text-gray-900">Total Amount:</span>
+                              <span className="font-bold text-primary text-lg">₹{invoice.total.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Payment Info */}
+                        {invoice.paymentStatus === 'paid' && invoice.paymentMethod && (
+                          <div className="bg-green-50 p-3 rounded-lg border border-green-200">
+                            <div className="flex items-center justify-between">
+                              <span className="text-sm font-medium text-green-700">Payment Status:</span>
+                              <span className="text-sm font-semibold text-green-900">PAID via {invoice.paymentMethod}</span>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Action Buttons */}
+                    <div className="flex gap-2 pt-2 flex-wrap">
                       <Button 
-                        size="sm" 
-                        className="bg-green-600 hover:bg-green-700"
-                        onClick={() => handleMarkAsPaid(invoice.id)}
-                        disabled={updatePaymentStatusMutation.isPending}
+                        variant="outline" 
+                        size="sm"
+                        onClick={() => toggleCard(invoice.id)}
                       >
-                        <CreditCard className="h-4 w-4 mr-1" />
-                        Mark as Paid
+                        {isExpanded ? (
+                          <>
+                            <ChevronUp className="h-4 w-4 mr-1" />
+                            Hide Details
+                          </>
+                        ) : (
+                          <>
+                            <ChevronDown className="h-4 w-4 mr-1" />
+                            Show Details
+                          </>
+                        )}
                       </Button>
-                    )}
-                    {invoice.paymentStatus === 'pending' && isCustomer && (
-                      <Button size="sm" className="bg-blue-600 hover:bg-blue-700">
-                        <CreditCard className="h-4 w-4 mr-1" />
-                        Pay Now
+                      <Button 
+                        variant="outline" 
+                        size="sm"
+                        onClick={() => setViewingInvoice(invoice)}
+                      >
+                        <Eye className="h-4 w-4 mr-1" />
+                        View Invoice
                       </Button>
-                    )}
-                  </div>
-                </CardContent>
-              </Card>
-            ))
+                      <Button 
+                        variant="outline" 
+                        size="sm"
+                        onClick={() => handleDownloadPdf(invoice)}
+                      >
+                        <Download className="h-4 w-4 mr-1" />
+                        Download PDF
+                      </Button>
+                      <Button 
+                        variant="outline" 
+                        size="sm"
+                        onClick={() => handleShareWhatsApp(invoice)}
+                      >
+                        <MessageCircle className="h-4 w-4 mr-1" />
+                        Share
+                      </Button>
+                      {invoice.paymentStatus === 'pending' && !isCustomer && (
+                        <Button 
+                          size="sm" 
+                          className="bg-green-600 hover:bg-green-700"
+                          onClick={() => handleMarkAsPaid(invoice)}
+                        >
+                          <CreditCard className="h-4 w-4 mr-1" />
+                          Mark as Paid
+                        </Button>
+                      )}
+                      {invoice.paymentStatus === 'pending' && isCustomer && (
+                        <Button size="sm" className="bg-blue-600 hover:bg-blue-700">
+                          <CreditCard className="h-4 w-4 mr-1" />
+                          Pay Now
+                        </Button>
+                      )}
+                    </div>
+                  </CardContent>
+                </Card>
+              );
+            })
           )}
         </div>
 
@@ -894,6 +1136,13 @@ export default function Billing() {
           invoice={viewingInvoice}
           isOpen={!!viewingInvoice}
           onClose={() => setViewingInvoice(null)}
+        />
+
+        {/* Payment Modal */}
+        <PaymentModal
+          invoice={paymentInvoice}
+          isOpen={!!paymentInvoice}
+          onClose={() => setPaymentInvoice(null)}
         />
       </div>
     </DashboardLayout>

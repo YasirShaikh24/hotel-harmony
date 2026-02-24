@@ -89,14 +89,6 @@ const App = () => (
                 </ProtectedRoute>
               }
             />
-            <Route
-              path="/whatsapp-logs"
-              element={
-                <ProtectedRoute allowedRoles={['admin']}>
-                  <Dashboard />
-                </ProtectedRoute>
-              }
-            />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </BrowserRouter>

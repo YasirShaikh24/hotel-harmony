@@ -277,7 +277,7 @@ export default function Customers() {
               Customer Details
             </h1>
             <p className="text-muted-foreground mt-1">
-              View customer information and booking history
+              View customer information and bogoking history
             </p>
           </div>
         </div>

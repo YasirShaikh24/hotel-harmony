@@ -41,16 +41,6 @@ export default function Login() {
     navigate('/dashboard');
   };
 
-  const demoCredentials = [
-    { role: 'Admin', email: 'admin@gmail.com', password: 'admin123' },
-    { role: 'Receptionist', email: 'receptionist@gmail.com', password: 'rec123' },
-  ];
-
-  const fillCredentials = (email: string, password: string) => {
-    setEmail(email);
-    setPassword(password);
-  };
-
   return (
     <div className="min-h-screen flex">
       {/* Left Panel - Decorative */}
@@ -164,27 +154,6 @@ export default function Login() {
               </form>
             </CardContent>
             <CardFooter className="flex flex-col gap-4 pt-0">
-              <div className="relative w-full">
-                <div className="absolute inset-0 flex items-center">
-                  <span className="w-full border-t" />
-                </div>
-                <div className="relative flex justify-center text-xs uppercase">
-                  <span className="bg-card px-2 text-muted-foreground">Demo Accounts</span>
-                </div>
-              </div>
-              <div className="grid grid-cols-2 gap-2 w-full">
-                {demoCredentials.map((cred) => (
-                  <Button
-                    key={cred.role}
-                    variant="outline"
-                    size="sm"
-                    onClick={() => fillCredentials(cred.email, cred.password)}
-                    className="text-xs"
-                  >
-                    {cred.role}
-                  </Button>
-                ))}
-              </div>
               <p className="text-center text-sm text-muted-foreground">
                 Don't have an account?{' '}
                 <Link to="/register" className="text-primary hover:underline font-medium">

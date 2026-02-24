@@ -15,7 +15,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { Users, TrendingUp, Wallet, MessageSquare } from 'lucide-react';
+import { Users, TrendingUp, Wallet } from 'lucide-react';
 
 const primaryNavItems = [
   { icon: LayoutDashboard, label: 'Dashboard', href: '/dashboard', roles: ['admin', 'receptionist', 'customer'] },
@@ -28,7 +28,6 @@ const moreNavItems = [
   { icon: Users, label: 'Customers', href: '/customers', roles: ['admin', 'receptionist'] },
   { icon: TrendingUp, label: 'Reports', href: '/reports', roles: ['admin'] },
   { icon: Wallet, label: 'Expenses', href: '/expenses', roles: ['admin'] },
-  { icon: MessageSquare, label: 'WhatsApp', href: '/whatsapp-logs', roles: ['admin'] },
 ];
 
 export function MobileNav() {

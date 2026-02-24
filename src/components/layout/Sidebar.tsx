@@ -9,7 +9,6 @@ import {
   Receipt,
   TrendingUp,
   Wallet,
-  MessageSquare,
   ChevronLeft,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -34,7 +33,6 @@ const navItems: NavItem[] = [
   { icon: Receipt, label: 'Billing', href: '/billing', roles: ['admin', 'receptionist', 'customer'] },
   { icon: TrendingUp, label: 'Reports', href: '/reports', roles: ['admin'] },
   { icon: Wallet, label: 'Expenses', href: '/expenses', roles: ['admin'] },
-  { icon: MessageSquare, label: 'WhatsApp Logs', href: '/whatsapp-logs', roles: ['admin'] },
 ];
 
 export function Sidebar({ isOpen, onToggle }: SidebarProps) {

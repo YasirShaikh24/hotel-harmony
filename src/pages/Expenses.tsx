@@ -98,13 +98,12 @@ function AddExpenseModal({ isOpen, onClose }: AddExpenseModalProps) {
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="description">Description</Label>
+            <Label htmlFor="description">Description (Optional)</Label>
             <Input
               id="description"
               value={formData.description}
               onChange={(e) => setFormData({ ...formData, description: e.target.value })}
               placeholder="Brief description of the expense"
-              required
             />
           </div>
 
@@ -334,7 +333,9 @@ export default function Expenses() {
                             </div>
                             <div className="flex-1">
                               <h3 className="font-semibold text-gray-900">{expense.category}</h3>
-                              <p className="text-sm text-gray-600 mt-1">{expense.description}</p>
+                              {expense.description && (
+                                <p className="text-sm text-gray-600 mt-1">{expense.description}</p>
+                              )}
                             </div>
                           </div>
                           

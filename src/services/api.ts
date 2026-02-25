@@ -450,10 +450,29 @@ export const invoicesApi = {
   },
   
   update: async (id: string, updateData: any) => {
+    // Get invoice with booking and room info
+    const { data: invoice, error: invoiceError } = await supabase
+      .from('invoices')
+      .select(`
+        *,
+        booking:bookings(
+          id,
+          check_out,
+          room_id,
+          status
+        )
+      `)
+      .eq('id', id)
+      .single();
+    
+    if (invoiceError) throw invoiceError;
+
+    // Update invoice
     const { data, error } = await supabase
       .from('invoices')
       .update({
         payment_status: updateData.paymentStatus,
+        payment_method: updateData.paymentMethod,
         additional_charges: updateData.additionalCharges,
       })
       .eq('id', id)
@@ -461,6 +480,30 @@ export const invoicesApi = {
       .single();
     
     if (error) throw error;
+
+    // If marking as paid, check if checkout date has passed
+    if (updateData.paymentStatus === 'paid' && invoice.booking) {
+      const checkoutDate = new Date(invoice.booking.check_out);
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      checkoutDate.setHours(0, 0, 0, 0);
+
+      // If checkout date is today or in the past, update room to available and booking to checked_out
+      if (checkoutDate <= today) {
+        // Update booking status to checked_out
+        await supabase
+          .from('bookings')
+          .update({ status: 'checked_out' })
+          .eq('id', invoice.booking.id);
+
+        // Update room status to available
+        await supabase
+          .from('rooms')
+          .update({ status: 'available' })
+          .eq('id', invoice.booking.room_id);
+      }
+    }
+    
     return data;
   },
   

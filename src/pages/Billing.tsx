@@ -33,6 +33,8 @@ interface Invoice {
   cgst: number;
   sgst: number;
   total: number;
+  advanceAmount?: number;
+  advancePaymentMethod?: string;
   paymentStatus: string;
   paymentMethod?: string;
   invoiceDate: string;
@@ -55,6 +57,8 @@ const getPaymentStatusColor = (status: string) => {
   switch (status) {
     case 'paid':
       return 'bg-green-100 text-green-800 border-green-200';
+    case 'partial':
+      return 'bg-blue-100 text-blue-800 border-blue-200';
     case 'pending':
       return 'bg-yellow-100 text-yellow-800 border-yellow-200';
     default:
@@ -66,6 +70,8 @@ const getPaymentStatusIcon = (status: string) => {
   switch (status) {
     case 'paid':
       return <CheckCircle className="h-4 w-4" />;
+    case 'partial':
+      return <Clock className="h-4 w-4" />;
     case 'pending':
       return <Clock className="h-4 w-4" />;
     default:
@@ -78,145 +84,179 @@ function ViewInvoiceModal({ invoice, isOpen, onClose }: ViewInvoiceModalProps) {
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="sm:max-w-3xl max-h-[90vh] overflow-y-auto bg-white">
-        <DialogHeader>
-          <DialogTitle className="sr-only">Invoice Details - {invoice.id}</DialogTitle>
-        </DialogHeader>
-        <div className="space-y-6 p-2">
-          {/* Header with Logo */}
-          <div className="text-center border-b-2 border-blue-600 pb-6">
-            <div className="flex items-center justify-center gap-4 mb-3">
-              <img 
-                src="/hk.png" 
-                alt="Hotel Krishna" 
+      <DialogContent className="sm:max-w-4xl max-h-[90vh] overflow-y-auto bg-white p-0">
+        
+        <div className="p-12 bg-white text-gray-900">
+
+          {/* HEADER WITH LOGO */}
+          <div className="grid grid-cols-2 items-start">
+
+            {/* LEFT SIDE - Logo + Hotel Info */}
+            <div className="flex items-start gap-4">
+
+              <img
+                src="/hk.png"
+                alt="Hotel Krishna"
                 className="h-16 w-16 object-contain"
                 onError={(e) => {
-                  e.currentTarget.style.display = 'none';
+                  e.currentTarget.style.display = "none";
                 }}
               />
+
               <div>
-                <h2 className="text-3xl font-bold text-blue-600" style={{ fontFamily: 'Georgia, serif' }}>
+                <h1 className="text-3xl font-semibold tracking-wide">
                   HOTEL KRISHNA
-                </h2>
-                <p className="text-sm text-gray-600 italic">Your Comfort, Our Priority</p>
+                </h1>
+                <p className="text-sm text-gray-600 mt-2">
+                  1st Floor Lalita Tower, Vadodara - 390005
+                </p>
+                <p className="text-sm text-gray-600">
+                  Phone: +91 9426786111 | info@hotelkrishna.com
+                </p>
+              </div>
+
+            </div>
+
+            {/* RIGHT SIDE - Invoice Info */}
+            <div className="text-right">
+              <h2 className="text-lg font-semibold uppercase tracking-widest">
+                Tax Invoice
+              </h2>
+
+              <div className="mt-4 space-y-1 text-sm">
+                <div>
+                  <span className="font-medium">Invoice #:</span>{" "}
+                  {invoice.id}
+                </div>
+                <div>
+                  <span className="font-medium">Date:</span>{" "}
+                  {new Date(invoice.invoiceDate).toLocaleDateString("en-IN")}
+                </div>
               </div>
             </div>
-            <div className="mt-4 space-y-1">
-              <p className="text-xl font-semibold text-gray-800">TAX INVOICE</p>
-              <p className="text-sm text-gray-600">Invoice No: <span className="font-semibold text-gray-800">{invoice.id}</span></p>
-              <p className="text-sm text-gray-600">Date: <span className="font-semibold text-gray-800">{new Date(invoice.invoiceDate).toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric' })}</span></p>
-            </div>
+
           </div>
 
-          {/* Customer & Room Info - Side by Side */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
-              <h3 className="font-bold text-blue-700 mb-3 text-base border-b border-blue-300 pb-2">Guest Information</h3>
-              <div className="space-y-2 text-sm">
-                <div className="flex">
-                  <span className="font-semibold text-gray-700 w-20">Name:</span>
-                  <span className="text-gray-900">{invoice.customerName}</span>
-                </div>
-                {invoice.customer2Name && (
-                  <div className="flex">
-                    <span className="font-semibold text-gray-700 w-20">Guest 2:</span>
-                    <span className="text-gray-900">{invoice.customer2Name}</span>
-                  </div>
-                )}
-                <div className="flex">
-                  <span className="font-semibold text-gray-700 w-20">Email:</span>
-                  <span className="text-gray-900 break-all">{invoice.customerEmail}</span>
-                </div>
-                <div className="flex">
-                  <span className="font-semibold text-gray-700 w-20">Phone:</span>
-                  <span className="text-gray-900">{invoice.customerPhone}</span>
-                </div>
-                {invoice.customerGstNumber && (
-                  <div className="flex">
-                    <span className="font-semibold text-gray-700 w-20">GST No:</span>
-                    <span className="text-gray-900 font-mono text-xs">{invoice.customerGstNumber}</span>
-                  </div>
-                )}
-              </div>
-            </div>
-            <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
-              <h3 className="font-bold text-blue-700 mb-3 text-base border-b border-blue-300 pb-2">Booking Details</h3>
-              <div className="space-y-2 text-sm">
-                <div className="flex">
-                  <span className="font-semibold text-gray-700 w-24">Room:</span>
-                  <span className="text-gray-900">{invoice.roomNumber} - {invoice.roomType}</span>
-                </div>
-                <div className="flex">
-                  <span className="font-semibold text-gray-700 w-24">Check-in:</span>
-                  <span className="text-gray-900">{new Date(invoice.checkIn).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}</span>
-                </div>
-                <div className="flex">
-                  <span className="font-semibold text-gray-700 w-24">Check-out:</span>
-                  <span className="text-gray-900">{new Date(invoice.checkOut).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}</span>
-                </div>
-                <div className="flex">
-                  <span className="font-semibold text-gray-700 w-24">Duration:</span>
-                  <span className="text-gray-900 font-semibold">{invoice.days} night{invoice.days > 1 ? 's' : ''}</span>
-                </div>
-              </div>
-            </div>
-          </div>
+          <div className="border-t border-gray-400 my-8"></div>
 
-          {/* Charges Breakdown */}
+          {/* BILL TO & STAY DETAILS */}
+          <div className="grid grid-cols-2 gap-24 text-sm">
+
           <div>
-            <h3 className="font-bold text-gray-800 mb-3 text-base">Charges Breakdown</h3>
-            <div className="bg-gradient-to-br from-gray-50 to-gray-100 p-5 rounded-lg border border-gray-300 shadow-sm space-y-3">
-              <div className="flex justify-between items-center py-2 border-b border-gray-300">
-                <span className="text-gray-700 font-medium">Room Charges ({invoice.days} night{invoice.days > 1 ? 's' : ''})</span>
-                <span className="text-gray-900 font-semibold text-lg">₹{invoice.roomCharges.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
-              </div>
-              <div className="flex justify-between items-center py-2 border-b border-gray-300">
-                <span className="text-gray-700 font-medium">Additional Charges</span>
-                <span className="text-gray-900 font-semibold text-lg">₹{invoice.additionalCharges.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
-              </div>
-              <div className="pt-2 space-y-2">
-                <div className="flex justify-between items-center text-sm">
-                  <span className="text-gray-600">CGST (2.5%)</span>
-                  <span className="text-gray-800 font-medium">₹{invoice.cgst.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
-                </div>
-                <div className="flex justify-between items-center text-sm">
-                  <span className="text-gray-600">SGST (2.5%)</span>
-                  <span className="text-gray-800 font-medium">₹{invoice.sgst.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
-                </div>
-              </div>
-              <div className="border-t-2 border-blue-600 pt-3 mt-3 flex justify-between items-center">
-                <span className="text-gray-900 font-bold text-xl">Total Amount</span>
-                <span className="text-blue-600 font-bold text-2xl">₹{invoice.total.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
-              </div>
+          <h3 className="uppercase text-xs tracking-widest text-gray-500 mb-3">
+            Bill To
+          </h3>
+
+          <p className="font-medium">{invoice.customerName}</p>
+          {invoice.customer2Name && <p>{invoice.customer2Name}</p>}
+          <p>{invoice.customerEmail}</p>
+          <p>{invoice.customerPhone}</p>
+
+          {/* Customer GST Number */}
+          {invoice.customerGstNumber && invoice.customerGstNumber.trim() !== "" && (
+            <div className="mt-3">
+              <p className="text-xs uppercase tracking-wide text-gray-500">
+                Customer GSTIN
+              </p>
+              <p className="font-medium text-gray-800">
+                {invoice.customerGstNumber}
+              </p>
             </div>
-          </div>
-
-          {/* Payment Status */}
-          <div className="flex items-center justify-between bg-yellow-50 p-4 rounded-lg border border-yellow-200">
-            <span className="font-semibold text-gray-800 text-base">Payment Status:</span>
-            <Badge className={`${getPaymentStatusColor(invoice.paymentStatus)} text-base px-4 py-2`}>
-              <div className="flex items-center gap-2">
-                {getPaymentStatusIcon(invoice.paymentStatus)}
-                <span className="font-semibold">{invoice.paymentStatus.toUpperCase()}</span>
-              </div>
-            </Badge>
-          </div>
-
-          {/* Footer */}
-          <div className="text-center text-sm text-gray-600 border-t pt-4">
-            <p className="font-medium">Thank you for choosing Hotel Krishna!</p>
-            <p className="text-xs mt-1">For any queries, please contact us at the reception.</p>
-          </div>
-
-          <Button onClick={onClose} className="w-full bg-blue-600 hover:bg-blue-700">
-            Close
-          </Button>
+          )}
         </div>
+            <div>
+              <h3 className="uppercase text-xs tracking-widest text-gray-500 mb-3">
+                Stay Details
+              </h3>
+
+              <p>Room: {invoice.roomNumber}</p>
+              <p>
+                Check-in: {new Date(invoice.checkIn).toLocaleDateString("en-IN")}
+              </p>
+              <p>
+                Check-out: {new Date(invoice.checkOut).toLocaleDateString("en-IN")}
+              </p>
+              <p>Duration: {invoice.days} Night(s)</p>
+            </div>
+
+          </div>
+
+          <div className="border-t border-gray-400 my-8"></div>
+
+          {/* TABLE */}
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-gray-400 text-left uppercase text-xs tracking-widest text-gray-500">
+                <th className="py-3">Description</th>
+                <th className="py-3 text-right">Amount (₹)</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td className="py-3">Room Charges ({invoice.days} night{invoice.days > 1 ? 's' : ''})</td>
+                <td className="py-3 text-right">
+                  {invoice.roomCharges.toLocaleString("en-IN", { minimumFractionDigits: 2 })}
+                </td>
+              </tr>
+
+              {invoice.additionalCharges > 0 && (
+                <tr>
+                  <td className="py-3">Additional Charges</td>
+                  <td className="py-3 text-right">
+                    {invoice.additionalCharges.toLocaleString("en-IN", { minimumFractionDigits: 2 })}
+                  </td>
+                </tr>
+              )}
+
+              <tr>
+                <td className="py-3">GST (5%)</td>
+                <td className="py-3 text-right">
+                  {(invoice.cgst + invoice.sgst).toLocaleString("en-IN", { minimumFractionDigits: 2 })}
+                </td>
+              </tr>
+
+              <tr className="border-t border-gray-400 font-semibold">
+                <td className="py-4 text-base">Total Amount</td>
+                <td className="py-4 text-right text-base">
+                  {invoice.total.toLocaleString("en-IN", { minimumFractionDigits: 2 })}
+                </td>
+              </tr>
+
+              {invoice.advanceAmount && invoice.advanceAmount > 0 && (
+                <>
+                  <tr>
+                    <td className="py-3">Advance Paid</td>
+                    <td className="py-3 text-right text-green-600">
+                      -{invoice.advanceAmount.toLocaleString("en-IN", { minimumFractionDigits: 2 })}
+                    </td>
+                  </tr>
+                  <tr className="font-semibold">
+                    <td className="py-3">Due Amount</td>
+                    <td className="py-3 text-right">
+                      {(invoice.total - invoice.advanceAmount).toLocaleString("en-IN", { minimumFractionDigits: 2 })}
+                    </td>
+                  </tr>
+                </>
+              )}
+            </tbody>
+          </table>
+
+          <div className="border-t border-gray-400 mt-12 pt-6 text-center text-xs text-gray-500">
+            Thank you for staying with Hotel Krishna.
+          </div>
+
+          <div className="mt-8">
+            <Button onClick={onClose} className="w-full">
+              Close
+            </Button>
+          </div>
+
+        </div>
+
       </DialogContent>
     </Dialog>
   );
 }
-
 function PaymentModal({ invoice, isOpen, onClose }: PaymentModalProps) {
   const [paymentMethod, setPaymentMethod] = useState<'Cash' | 'GPay'>('Cash');
   const { toast } = useToast();
@@ -255,6 +295,9 @@ function PaymentModal({ invoice, isOpen, onClose }: PaymentModalProps) {
 
   if (!invoice) return null;
 
+  const dueAmount = invoice.total - (invoice.advanceAmount || 0);
+  const amountToPay = invoice.paymentStatus === 'partial' ? dueAmount : invoice.total;
+
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent className="sm:max-w-md">
@@ -265,9 +308,27 @@ function PaymentModal({ invoice, isOpen, onClose }: PaymentModalProps) {
           <div className="space-y-4">
             <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
               <div className="flex justify-between items-center">
-                <span className="text-sm font-medium text-gray-700">Invoice Amount:</span>
-                <span className="text-2xl font-bold text-blue-600">
+                <span className="text-sm font-medium text-gray-700">Total Amount:</span>
+                <span className="text-lg font-bold text-blue-600">
                   ₹{invoice.total.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </span>
+              </div>
+              {invoice.advanceAmount > 0 && (
+                <div className="flex justify-between items-center mt-2">
+                  <span className="text-sm font-medium text-gray-700">
+                    {invoice.paymentStatus === 'partial' ? 'Advance Paid:' : 'Previous Payment:'}
+                  </span>
+                  <span className="text-sm font-medium text-green-600">
+                    -₹{invoice.advanceAmount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </span>
+                </div>
+              )}
+              <div className="border-t pt-2 mt-2 flex justify-between items-center">
+                <span className="text-sm font-bold text-gray-900">
+                  {invoice.paymentStatus === 'partial' ? 'Amount to Pay:' : 'Total Amount:'}
+                </span>
+                <span className="text-xl font-bold text-orange-600">
+                  ₹{amountToPay.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                 </span>
               </div>
               <div className="mt-2 text-xs text-gray-600">
@@ -417,283 +478,133 @@ export default function Billing() {
     : filterInvoicesByDate(sortedInvoices);
 
   const handleDownloadPdf = (invoice: Invoice) => {
-    try {
-      const doc = new jsPDF();
-      
-      // Helper function to format currency
-      const formatCurrency = (amount: number): string => {
-        return amount.toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
-      };
-      
-      // Set font sizes
-      const titleSize = 24;
-      const subtitleSize = 10;
-      const headingSize = 13;
-      const normalSize = 10;
-      const smallSize = 9;
-      
-      // Colors
-      const primaryBlue = [37, 99, 235]; // #2563eb
-      const darkGray = [31, 41, 55]; // #1f2937
-      const mediumGray = [107, 114, 128]; // #6b7280
-      const lightGray = [229, 231, 235]; // #e5e7eb
-      
-      let yPos = 20;
-      
-      // Add logo if available
-      const logoImg = new Image();
-      logoImg.src = '/hk.png';
-      try {
-        doc.addImage(logoImg, 'PNG', 20, yPos, 20, 20);
-      } catch (e) {
-        // Logo not available, skip
-      }
-      
-      // Header - Hotel Name
-      doc.setFontSize(titleSize);
-      doc.setFont('helvetica', 'bold');
-      doc.setTextColor(primaryBlue[0], primaryBlue[1], primaryBlue[2]);
-      doc.text('HOTEL KRISHNA', 45, yPos + 10);
-      
-      doc.setFontSize(subtitleSize);
-      doc.setFont('helvetica', 'italic');
-      doc.setTextColor(mediumGray[0], mediumGray[1], mediumGray[2]);
-      doc.text('Your Comfort, Our Priority', 45, yPos + 16);
-      
-      // Invoice Title
-      yPos += 30;
-      doc.setFontSize(16);
-      doc.setFont('helvetica', 'bold');
-      doc.setTextColor(darkGray[0], darkGray[1], darkGray[2]);
-      doc.text('TAX INVOICE', 105, yPos, { align: 'center' });
-      
-      yPos += 8;
-      doc.setFontSize(normalSize);
-      doc.setFont('helvetica', 'normal');
-      doc.setTextColor(mediumGray[0], mediumGray[1], mediumGray[2]);
-      doc.text('Invoice No: ', 105, yPos, { align: 'center' });
-      doc.setFont('helvetica', 'bold');
-      doc.setTextColor(darkGray[0], darkGray[1], darkGray[2]);
-      const invoiceNoWidth = doc.getTextWidth('Invoice No: ');
-      doc.text(invoice.id, 105 + invoiceNoWidth / 2, yPos, { align: 'left' });
-      
-      yPos += 6;
-      doc.setFont('helvetica', 'normal');
-      doc.setTextColor(mediumGray[0], mediumGray[1], mediumGray[2]);
-      const dateStr = new Date(invoice.invoiceDate).toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric' });
-      doc.text('Date: ', 105, yPos, { align: 'center' });
-      doc.setFont('helvetica', 'bold');
-      doc.setTextColor(darkGray[0], darkGray[1], darkGray[2]);
-      const dateWidth = doc.getTextWidth('Date: ');
-      doc.text(dateStr, 105 + dateWidth / 2, yPos, { align: 'left' });
-      
-      // Blue separator line
-      yPos += 8;
-      doc.setDrawColor(primaryBlue[0], primaryBlue[1], primaryBlue[2]);
-      doc.setLineWidth(1);
-      doc.line(20, yPos, 190, yPos);
-      
-      // Guest Information Box
-      yPos += 10;
-      const guestBoxHeight = invoice.customer2Name && invoice.customerGstNumber ? 44 : 
-                             invoice.customer2Name || invoice.customerGstNumber ? 38 : 32;
-      
-      doc.setFillColor(239, 246, 255); // Light blue background
-      doc.setDrawColor(191, 219, 254); // Blue border
-      doc.roundedRect(20, yPos, 80, guestBoxHeight, 2, 2, 'FD');
-      
-      doc.setFontSize(headingSize);
-      doc.setFont('helvetica', 'bold');
-      doc.setTextColor(primaryBlue[0], primaryBlue[1], primaryBlue[2]);
-      doc.text('Guest Information', 25, yPos + 7);
-      
-      doc.setFontSize(normalSize);
-      doc.setFont('helvetica', 'bold');
-      doc.setTextColor(darkGray[0], darkGray[1], darkGray[2]);
-      yPos += 14;
-      doc.text('Name:', 25, yPos);
-      doc.setFont('helvetica', 'normal');
-      doc.text(invoice.customerName, 42, yPos);
-      
-      if (invoice.customer2Name) {
-        yPos += 6;
-        doc.setFont('helvetica', 'bold');
-        doc.text('Guest 2:', 25, yPos);
-        doc.setFont('helvetica', 'normal');
-        doc.text(invoice.customer2Name, 42, yPos);
-      }
-      
-      yPos += 6;
-      doc.setFont('helvetica', 'bold');
-      doc.text('Email:', 25, yPos);
-      doc.setFont('helvetica', 'normal');
-      doc.setFontSize(smallSize);
-      doc.text(invoice.customerEmail, 42, yPos);
-      
-      yPos += 6;
-      doc.setFontSize(normalSize);
-      doc.setFont('helvetica', 'bold');
-      doc.text('Phone:', 25, yPos);
-      doc.setFont('helvetica', 'normal');
-      doc.text(invoice.customerPhone, 42, yPos);
-      
-      if (invoice.customerGstNumber) {
-        yPos += 6;
-        doc.setFont('helvetica', 'bold');
-        doc.text('GST No:', 25, yPos);
-        doc.setFont('helvetica', 'normal');
-        doc.setFontSize(smallSize);
-        doc.text(invoice.customerGstNumber, 42, yPos);
-        doc.setFontSize(normalSize);
-      }
-      
-      // Booking Details Box - aligned with Guest Info
-      const bookingYPos = yPos - (invoice.customer2Name && invoice.customerGstNumber ? 38 : 
-                                   invoice.customer2Name || invoice.customerGstNumber ? 32 : 26);
-      
-      doc.setFillColor(239, 246, 255); // Light blue background (same as guest info)
-      doc.setDrawColor(191, 219, 254); // Blue border
-      doc.roundedRect(110, bookingYPos, 80, 38, 2, 2, 'FD');
-      
-      doc.setFontSize(headingSize);
-      doc.setFont('helvetica', 'bold');
-      doc.setTextColor(primaryBlue[0], primaryBlue[1], primaryBlue[2]);
-      doc.text('Booking Details', 115, bookingYPos + 7);
-      
-      doc.setFontSize(normalSize);
-      doc.setFont('helvetica', 'bold');
-      doc.setTextColor(darkGray[0], darkGray[1], darkGray[2]);
-      let bookingY = bookingYPos + 14;
-      doc.text('Room:', 115, bookingY);
-      doc.setFont('helvetica', 'normal');
-      doc.text(invoice.roomNumber + ' - ' + invoice.roomType, 132, bookingY);
-      
-      bookingY += 6;
-      doc.setFont('helvetica', 'bold');
-      doc.text('Check-in:', 115, bookingY);
-      doc.setFont('helvetica', 'normal');
-      doc.text(new Date(invoice.checkIn).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }), 137, bookingY);
-      
-      bookingY += 6;
-      doc.setFont('helvetica', 'bold');
-      doc.text('Check-out:', 115, bookingY);
-      doc.setFont('helvetica', 'normal');
-      doc.text(new Date(invoice.checkOut).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }), 140, bookingY);
-      
-      bookingY += 6;
-      doc.setFont('helvetica', 'bold');
-      doc.text('Duration:', 115, bookingY);
-      doc.setFont('helvetica', 'normal');
-      doc.text(invoice.days + ' night' + (invoice.days > 1 ? 's' : ''), 135, bookingY);
-      
-      // Charges Breakdown
-      yPos += 20;
-      doc.setFontSize(headingSize);
-      doc.setFont('helvetica', 'bold');
-      doc.setTextColor(darkGray[0], darkGray[1], darkGray[2]);
-      doc.text('Charges Breakdown', 20, yPos);
-      
-      // Charges table background
-      yPos += 5;
-      doc.setFillColor(249, 250, 251); // Light gray
-      doc.setDrawColor(lightGray[0], lightGray[1], lightGray[2]);
-      doc.roundedRect(20, yPos, 170, 50, 2, 2, 'FD');
-      
-      doc.setFontSize(normalSize);
-      doc.setFont('helvetica', 'normal');
-      doc.setTextColor(darkGray[0], darkGray[1], darkGray[2]);
-      yPos += 10;
-      
-      // Room charges
-      doc.text('Room Charges (' + invoice.days + ' night' + (invoice.days > 1 ? 's' : '') + ')', 25, yPos);
-      doc.setFont('helvetica', 'bold');
-      doc.text('Rs. ' + formatCurrency(invoice.roomCharges), 185, yPos, { align: 'right' });
-      
-      yPos += 8;
-      doc.setFont('helvetica', 'normal');
-      doc.text('Additional Charges', 25, yPos);
-      doc.setFont('helvetica', 'bold');
-      doc.text('Rs. ' + formatCurrency(invoice.additionalCharges), 185, yPos, { align: 'right' });
-      
-      // Tax separator
-      yPos += 10;
-      doc.setDrawColor(lightGray[0], lightGray[1], lightGray[2]);
-      doc.line(25, yPos, 185, yPos);
-      
-      yPos += 7;
-      doc.setFontSize(smallSize);
-      doc.setFont('helvetica', 'normal');
-      doc.setTextColor(mediumGray[0], mediumGray[1], mediumGray[2]);
-      doc.text('CGST (2.5%)', 25, yPos);
-      doc.text('Rs. ' + formatCurrency(invoice.cgst), 185, yPos, { align: 'right' });
-      
-      yPos += 6;
-      doc.text('SGST (2.5%)', 25, yPos);
-      doc.text('Rs. ' + formatCurrency(invoice.sgst), 185, yPos, { align: 'right' });
-      
-      // Total section
-      yPos += 12;
-      doc.setDrawColor(primaryBlue[0], primaryBlue[1], primaryBlue[2]);
-      doc.setLineWidth(1);
-      doc.line(20, yPos, 190, yPos);
-      
-      yPos += 8;
-      doc.setFontSize(headingSize + 2);
-      doc.setFont('helvetica', 'bold');
-      doc.setTextColor(darkGray[0], darkGray[1], darkGray[2]);
-      doc.text('Total Amount', 25, yPos);
-      doc.setTextColor(primaryBlue[0], primaryBlue[1], primaryBlue[2]);
-      doc.text('Rs. ' + formatCurrency(invoice.total), 185, yPos, { align: 'right' });
-      
-      // Payment Status
-      yPos += 15;
-      doc.setFontSize(normalSize);
-      doc.setFont('helvetica', 'bold');
-      doc.setTextColor(darkGray[0], darkGray[1], darkGray[2]);
-      doc.text('Payment Status:', 20, yPos);
-      
-      if (invoice.paymentStatus === 'paid') {
-        doc.setTextColor(22, 163, 74); // green
-        doc.text('PAID', 60, yPos);
-      } else {
-        doc.setTextColor(234, 179, 8); // yellow
-        doc.text('PENDING', 60, yPos);
-      }
-      
-      // Footer
-      yPos = 270;
-      doc.setFontSize(normalSize);
-      doc.setFont('helvetica', 'bold');
-      doc.setTextColor(darkGray[0], darkGray[1], darkGray[2]);
-      doc.text('Thank you for choosing Hotel Krishna!', 105, yPos, { align: 'center' });
-      
-      yPos += 5;
-      doc.setFontSize(smallSize);
-      doc.setFont('helvetica', 'normal');
-      doc.setTextColor(mediumGray[0], mediumGray[1], mediumGray[2]);
-      doc.text('For any queries, please contact us at the reception.', 105, yPos, { align: 'center' });
-      
-      // Generate filename
-      const today = new Date().toISOString().split('T')[0];
-      const filename = today + '_Room' + invoice.roomNumber + '_' + invoice.id + '.pdf';
-      
-      // Save PDF
-      doc.save(filename);
-      
-      toast({
-        title: 'Success',
-        description: 'PDF downloaded as ' + filename,
-      });
-    } catch (error) {
-      console.error('PDF generation error:', error);
-      toast({
-        title: 'Error',
-        description: 'Failed to generate PDF',
-        variant: 'destructive',
-      });
-    }
+  const doc = new jsPDF();
+  let y = 20;
+
+  const currency = (num: number) =>
+    num.toLocaleString('en-IN', { minimumFractionDigits: 2 });
+
+  // Header
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(22);
+  doc.text('HOTEL KRISHNA', 20, y);
+
+  doc.setFontSize(9);
+  doc.setFont('helvetica', 'normal');
+  doc.text('1st Floor Lalita Tower, Vadodara - 390005', 20, y + 6);
+  doc.text('Phone: +91 9426786111 | info@hotelkrishna.com', 20, y + 11);
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(11);
+  doc.text('TAX INVOICE', 160, y, { align: 'right' });
+
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(9);
+  doc.text(`Invoice #: ${invoice.id}`, 160, y + 6, { align: 'right' });
+  doc.text(
+    `Date: ${new Date(invoice.invoiceDate).toLocaleDateString('en-IN')}`,
+    160,
+    y + 11,
+    { align: 'right' }
+  );
+
+  y += 20;
+  doc.line(20, y, 190, y);
+
+  // Bill To
+  y += 10;
+  doc.setFont('helvetica', 'bold');
+  doc.text('BILL TO', 20, y);
+
+  doc.setFont('helvetica', 'normal');
+  y += 6;
+  doc.text(invoice.customerName, 20, y);
+  y += 5;
+  doc.text(invoice.customerEmail, 20, y);
+  y += 5;
+  doc.text(invoice.customerPhone, 20, y);
+  if (invoice.customerGstNumber) {
+    y += 5;
+    doc.text(`GSTIN: ${invoice.customerGstNumber}`, 20, y);
+  }
+
+  // Stay Details
+  doc.setFont('helvetica', 'bold');
+  doc.text('STAY DETAILS', 120, y - 10);
+
+  doc.setFont('helvetica', 'normal');
+  doc.text(`Room: ${invoice.roomNumber}`, 120, y - 4);
+  doc.text(
+    `Check-in: ${new Date(invoice.checkIn).toLocaleDateString('en-IN')}`,
+    120,
+    y + 1
+  );
+  doc.text(
+    `Check-out: ${new Date(invoice.checkOut).toLocaleDateString('en-IN')}`,
+    120,
+    y + 6
+  );
+
+  y += 15;
+  doc.line(20, y, 190, y);
+
+  // Charges
+  y += 10;
+  doc.setFont('helvetica', 'bold');
+  doc.text('Description', 20, y);
+  doc.text('Amount (₹)', 180, y, { align: 'right' });
+
+  y += 3;
+  doc.line(20, y, 190, y);
+
+  const addRow = (label: string, value: number) => {
+    y += 8;
+    doc.setFont('helvetica', 'normal');
+    doc.text(label, 20, y);
+    doc.text(currency(value), 180, y, { align: 'right' });
   };
 
+  addRow('Room Charges', invoice.roomCharges);
+  if (invoice.additionalCharges > 0) {
+    addRow('Additional Charges', invoice.additionalCharges);
+  }
+  addRow('GST (5%)', invoice.cgst + invoice.sgst);
+
+  y += 10;
+  doc.line(120, y, 190, y);
+
+  y += 8;
+  doc.setFont('helvetica', 'bold');
+  doc.text('TOTAL', 120, y);
+  doc.text(currency(invoice.total), 180, y, { align: 'right' });
+
+  if (invoice.advanceAmount > 0) {
+    y += 8;
+    doc.setFont('helvetica', 'normal');
+    doc.text('Advance Paid', 120, y);
+    doc.text('-' + currency(invoice.advanceAmount), 180, y, { align: 'right' });
+
+    y += 8;
+    doc.setFont('helvetica', 'bold');
+    doc.text('DUE AMOUNT', 120, y);
+    doc.text(
+      currency(invoice.total - invoice.advanceAmount),
+      180,
+      y,
+      { align: 'right' }
+    );
+  }
+
+  y += 20;
+  doc.line(20, y, 190, y);
+
+  y += 10;
+  doc.setFontSize(9);
+  doc.setFont('helvetica', 'normal');
+  doc.text('Thank you for staying with us.', 105, y, { align: 'center' });
+
+  doc.save(`Invoice_${invoice.id}.pdf`);
+};
   const handleShareWhatsApp = (invoice: Invoice) => {
     try {
       // Format the invoice details for WhatsApp
@@ -723,11 +634,13 @@ export default function Billing() {
         `*CHARGES BREAKDOWN*\n` +
         `Room Charges: ₹${invoice.roomCharges.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}\n` +
         `Additional: ₹${invoice.additionalCharges.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}\n` +
+        (invoice.advanceAmount > 0 ? `Advance Paid${invoice.advancePaymentMethod ? ` (${invoice.advancePaymentMethod})` : ''}: ₹${invoice.advanceAmount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}\n` : '') +
         `CGST (2.5%): ₹${invoice.cgst.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}\n` +
         `SGST (2.5%): ₹${invoice.sgst.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}\n\n` +
         `━━━━━━━━━━━━━━━━━━━━\n` +
         `*TOTAL AMOUNT: ₹${invoice.total.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}*\n` +
-        `Payment Status: ${invoice.paymentStatus.toUpperCase()}\n\n` +
+        (invoice.advanceAmount > 0 ? `*Due Amount: ₹${(invoice.total - invoice.advanceAmount).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}*\n` : '') +
+        `Payment Status: ${invoice.paymentStatus.toUpperCase()}${invoice.paymentStatus === 'paid' && invoice.paymentMethod ? ` via ${invoice.paymentMethod}` : invoice.paymentStatus === 'partial' && invoice.advancePaymentMethod ? ` (Advance via ${invoice.advancePaymentMethod})` : ''}\n\n` +
         `Thank you for choosing Hotel Krishna! 🙏`;
       
       // Remove country code if present and format phone number
@@ -1049,6 +962,24 @@ export default function Billing() {
                               <span className="font-bold text-gray-900">Total Amount:</span>
                               <span className="font-bold text-primary text-lg">₹{invoice.total.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                             </div>
+                            {invoice.advanceAmount > 0 && (
+                              <>
+                                <div className="flex justify-between">
+                                  <span className="text-gray-700">Advance Paid:</span>
+                                  <span className="font-medium text-green-600">-₹{invoice.advanceAmount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                                </div>
+                                {invoice.advancePaymentMethod && (
+                                  <div className="flex justify-between text-xs">
+                                    <span className="text-gray-600">Advance Method:</span>
+                                    <span className="text-gray-800 font-medium">{invoice.advancePaymentMethod}</span>
+                                  </div>
+                                )}
+                                <div className="border-t pt-2 mt-2 flex justify-between">
+                                  <span className="font-bold text-orange-600">Due Amount:</span>
+                                  <span className="font-bold text-orange-600 text-lg">₹{(invoice.total - invoice.advanceAmount).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                                </div>
+                              </>
+                            )}
                           </div>
                         </div>
 
@@ -1112,6 +1043,16 @@ export default function Billing() {
                           size="sm" 
                           className="bg-green-600 hover:bg-green-700"
                           onClick={() => handleMarkAsPaid(invoice)}
+                        >
+                          <CreditCard className="h-4 w-4 mr-1" />
+                          Mark as Paid
+                        </Button>
+                      )}
+                      {invoice.paymentStatus === 'partial' && !isCustomer && (
+                        <Button 
+                          size="sm" 
+                          className="bg-orange-600 hover:bg-orange-700"
+                          onClick={() => setPaymentInvoice(invoice)}
                         >
                           <CreditCard className="h-4 w-4 mr-1" />
                           Mark as Paid

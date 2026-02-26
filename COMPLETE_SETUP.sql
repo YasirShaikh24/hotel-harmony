@@ -51,6 +51,7 @@ CREATE TABLE public.customers (
     email TEXT,
     aadhar_encrypted TEXT,
     address TEXT,
+    customer_gst_number TEXT,  -- added to store GST number for customers
     created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(),
     updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now()
 );

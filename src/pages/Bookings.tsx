@@ -31,6 +31,8 @@ interface Booking {
   adults: number;
   children: number;
   totalAmount: number;
+  advanceAmount?: number;
+  advancePaymentMethod?: string;
   specialRequests?: string;
   createdAt?: string;
 }
@@ -74,6 +76,8 @@ function AddBookingModal({ isOpen, onClose }: AddBookingModalProps) {
     adults: 1,
     children: 0,
     totalAmount: 0,
+    advanceAmount: 0,
+    advancePaymentMethod: '',
   };
   
   const [formData, setFormData] = useState(initialFormData);
@@ -110,10 +114,11 @@ function AddBookingModal({ isOpen, onClose }: AddBookingModalProps) {
       });
       onClose();
     },
-    onError: () => {
+    onError: (error) => {
+      console.error('Booking creation error:', error);
       toast({
         title: 'Error',
-        description: 'Failed to create booking',
+        description: error?.message || 'Failed to create booking',
         variant: 'destructive',
       });
     },
@@ -168,6 +173,15 @@ function AddBookingModal({ isOpen, onClose }: AddBookingModalProps) {
       toast({
         title: 'Invalid Aadhar Number',
         description: 'Aadhar number must be exactly 12 digits',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    if (formData.advanceAmount > 0 && !formData.advancePaymentMethod) {
+      toast({
+        title: 'Payment Method Required',
+        description: 'Please select a payment method for the advance payment',
         variant: 'destructive',
       });
       return;
@@ -387,6 +401,66 @@ function AddBookingModal({ isOpen, onClose }: AddBookingModalProps) {
             </div>
           )}
 
+          <div className="space-y-2">
+            <Label htmlFor="advanceAmount">Advance Payment (₹)</Label>
+            <Input
+              id="advanceAmount"
+              type="number"
+              min="0"
+              step="0.01"
+              value={formData.advanceAmount || ''}
+              onChange={(e) => setFormData({ ...formData, advanceAmount: parseFloat(e.target.value) || 0 })}
+              placeholder="Enter advance payment amount"
+            />
+          </div>
+
+          {formData.advanceAmount > 0 && (
+            <div className="space-y-2">
+              <Label>Advance Payment Method</Label>
+              <div className="flex gap-4">
+                <label className="flex items-center space-x-2">
+                  <input
+                    type="radio"
+                    name="advancePaymentMethod"
+                    value="gpay"
+                    checked={formData.advancePaymentMethod === 'gpay'}
+                    onChange={(e) => setFormData({ ...formData, advancePaymentMethod: e.target.value })}
+                    required={formData.advanceAmount > 0}
+                  />
+                  <span>GPay</span>
+                </label>
+                <label className="flex items-center space-x-2">
+                  <input
+                    type="radio"
+                    name="advancePaymentMethod"
+                    value="cash"
+                    checked={formData.advancePaymentMethod === 'cash'}
+                    onChange={(e) => setFormData({ ...formData, advancePaymentMethod: e.target.value })}
+                    required={formData.advanceAmount > 0}
+                  />
+                  <span>Cash</span>
+                </label>
+              </div>
+            </div>
+          )}
+
+          {formData.totalAmount > 0 && formData.advanceAmount > 0 && (
+            <div className="bg-blue-50 p-4 rounded-lg space-y-2">
+              <div className="flex justify-between text-sm">
+                <span>Total Amount:</span>
+                <span className="font-medium">₹{(formData.totalAmount + (formData.totalAmount * 0.05)).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+              </div>
+              <div className="flex justify-between text-sm">
+                <span>Advance Paid:</span>
+                <span className="font-medium text-green-600">-₹{formData.advanceAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+              </div>
+              <div className="border-t pt-2 flex justify-between font-bold text-lg">
+                <span>Due Amount:</span>
+                <span className="text-orange-600">₹{((formData.totalAmount + (formData.totalAmount * 0.05)) - formData.advanceAmount).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+              </div>
+            </div>
+          )}
+
           <div className="flex gap-2 pt-4">
             <Button type="submit" disabled={addBookingMutation.isPending} className="flex-1">
               {addBookingMutation.isPending ? 'Creating...' : 'Create Booking'}
@@ -456,6 +530,22 @@ function ViewBookingModal({ booking, isOpen, onClose }: ViewBookingModalProps) {
                 <span>Total Billing Amount:</span>
                 <span className="text-primary">₹{(booking.totalAmount + (booking.totalAmount * 0.05)).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
               </div>
+              {booking.advanceAmount > 0 && (
+                <>
+                  <div className="flex justify-between text-sm">
+                    <span>Advance Paid:</span>
+                    <span className="font-medium text-green-600">-₹{booking.advanceAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span>Advance Method:</span>
+                    <span className="font-medium capitalize">{booking.advancePaymentMethod}</span>
+                  </div>
+                  <div className="border-t pt-1 mt-1 flex justify-between font-bold text-orange-600">
+                    <span>Due Amount:</span>
+                    <span>₹{((booking.totalAmount + (booking.totalAmount * 0.05)) - booking.advanceAmount).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                  </div>
+                </>
+              )}
             </div>
           </div>
 

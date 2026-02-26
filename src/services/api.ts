@@ -182,39 +182,55 @@ export const roomsApi = {
 };
 
 // Bookings API
+// ================= BOOKINGS API =================
+// ================= BOOKINGS API =================
 export const bookingsApi = {
+
+  // ================= GET ALL BOOKINGS =================
   getAll: async (status?: string) => {
     let query = supabase
       .from('bookings')
       .select(`
-        *,
-        customer:customers(*),
+        id,
+        customer_id,
+        room_id,
+        check_in,
+        check_out,
+        status,
+        adults,
+        children,
+        special_requests,
+        advance_amount,
+        advance_payment_method,
+        created_at,
+        customer:customers(id, name, email, mobile),
         room:rooms(*)
       `)
       .order('created_at', { ascending: false });
-    
+
     if (status === 'checkin') {
       query = query.eq('status', 'confirmed');
     } else if (status === 'checkout') {
       query = query.eq('status', 'checked_in');
     }
-    
+
     const { data, error } = await query;
     if (error) throw error;
-    
+
     const typeMap: Record<string, string> = {
-      'single': 'Single AC',
-      'double': 'Double AC',
-      'deluxe': 'Deluxe',
-      'suite': 'Suite',
-      'presidential': 'Presidential'
+      single: 'Single AC',
+      double: 'Double AC',
+      deluxe: 'Deluxe',
+      suite: 'Suite',
+      presidential: 'Presidential'
     };
-    
+
     return data.map(booking => ({
       id: booking.id,
       customerName: booking.customer?.name,
       customerEmail: booking.customer?.email,
       customerPhone: booking.customer?.mobile,
+      customerGstNumber: booking.customer?.customer_gst_number || '',
       roomNumber: booking.room?.room_number,
       roomType: typeMap[booking.room?.type] || booking.room?.type,
       checkIn: booking.check_in,
@@ -223,145 +239,222 @@ export const bookingsApi = {
       adults: booking.adults,
       children: booking.children,
       specialRequests: booking.special_requests,
-      totalAmount: booking.room ? parseFloat(booking.room.price) * 
-        Math.ceil((new Date(booking.check_out).getTime() - new Date(booking.check_in).getTime()) / (1000 * 60 * 60 * 24)) : 0,
+      totalAmount: booking.room
+        ? parseFloat(booking.room.price) *
+          Math.ceil(
+            (new Date(booking.check_out).getTime() -
+              new Date(booking.check_in).getTime()) /
+              (1000 * 60 * 60 * 24)
+          )
+        : 0,
+      advanceAmount: parseFloat(booking.advance_amount || 0),
+      advancePaymentMethod: booking.advance_payment_method,
       createdAt: booking.created_at,
     }));
   },
-  
+
+  // ================= CREATE BOOKING =================
   create: async (bookingData: any) => {
-    // 1. Get room by room number
+
+    // 1️⃣ Get room
     const { data: room, error: roomError } = await supabase
       .from('rooms')
       .select('*')
       .eq('room_number', bookingData.roomNumber)
       .single();
-    
+
     if (roomError || !room) throw new Error('Room not found');
-    if (room.status !== 'available') throw new Error('Room is not available');
-    
-    // 2. Create or get customer
-    const { data: customer, error: customerError } = await supabase
+
+    // 2️⃣ Overlap check
+    const { data: existingBookings, error: overlapError } = await supabase
+      .from('bookings')
+      .select('*')
+      .eq('room_id', room.id)
+      .neq('status', 'cancelled');
+
+    if (overlapError) throw overlapError;
+
+    const newCheckIn = new Date(bookingData.checkIn);
+    const newCheckOut = new Date(bookingData.checkOut);
+
+    const hasOverlap = existingBookings.some((b: any) => {
+      const existingCheckIn = new Date(b.check_in);
+      const existingCheckOut = new Date(b.check_out);
+      return newCheckIn < existingCheckOut && newCheckOut > existingCheckIn;
+    });
+
+    if (hasOverlap) {
+      throw new Error('Room already booked for selected dates');
+    }
+
+    // 3️⃣ Create or Update Customer
+    let customer;
+
+    const { data: existingCustomer, error: findError } = await supabase
       .from('customers')
-      .insert({
+      .select('id, name, email, mobile, aadhar_encrypted, address, created_at')
+      .eq('mobile', bookingData.customerPhone)
+      .single();
+
+    if (findError && findError.code !== 'PGRST116') throw findError;
+
+    if (existingCustomer) {
+      customer = existingCustomer;
+
+      const updates: any = {};
+
+      if (existingCustomer.name !== bookingData.customerName)
+        updates.name = bookingData.customerName;
+
+      if (existingCustomer.email !== bookingData.customerEmail)
+        updates.email = bookingData.customerEmail;
+
+      if (Object.keys(updates).length > 0) {
+        const { error: updateError } = await supabase
+          .from('customers')
+          .update(updates)
+          .eq('id', existingCustomer.id);
+
+        if (updateError) throw updateError;
+      }
+
+    } else {
+
+      const insertCustomer: any = {
         name: bookingData.customerName,
         mobile: bookingData.customerPhone,
         email: bookingData.customerEmail,
-      })
-      .select()
-      .single();
-    
-    if (customerError) throw customerError;
-    
-    // 3. Calculate total amount
-    const days = Math.ceil((new Date(bookingData.checkOut).getTime() - new Date(bookingData.checkIn).getTime()) / (1000 * 60 * 60 * 24));
-    const totalAmount = parseFloat(room.price) * days;
-    
-    // 4. Create booking
+      };
+
+      const { data: newCustomer, error: customerError } = await supabase
+        .from('customers')
+        .insert(insertCustomer)
+        .select()
+        .single();
+
+      if (customerError) throw customerError;
+      customer = newCustomer;
+    }
+
+    // 4️⃣ Create Booking (NO GST HERE ❌)
+    const insertPayload = {
+      customer_id: customer.id,
+      room_id: room.id,
+      check_in: bookingData.checkIn,
+      check_out: bookingData.checkOut,
+      status: 'confirmed',
+      adults: bookingData.adults || 1,
+      children: bookingData.children || 0,
+      special_requests: bookingData.specialRequests || null,
+      advance_amount: bookingData.advanceAmount || 0,
+      advance_payment_method: bookingData.advancePaymentMethod || null,
+    };
+
     const { data: booking, error: bookingError } = await supabase
       .from('bookings')
-      .insert({
-        customer_id: customer.id,
-        room_id: room.id,
-        check_in: bookingData.checkIn,
-        check_out: bookingData.checkOut,
-        status: 'confirmed',
-        adults: bookingData.adults || 1,
-        children: bookingData.children || 0,
-        special_requests: bookingData.specialRequests,
-      })
+      .insert(insertPayload)
       .select()
       .single();
-    
+
     if (bookingError) throw bookingError;
-    
-    // 5. Update room status
-    await supabase
-      .from('rooms')
-      .update({ status: 'occupied' })
-      .eq('id', room.id);
-    
-    // 6. Create invoice
-    const cgst = totalAmount * 0.025;
-    const sgst = totalAmount * 0.025;
-    const total = totalAmount + cgst + sgst;
-    
-    await supabase
-      .from('invoices')
-      .insert({
-        booking_id: booking.id,
-        room_charges: totalAmount,
-        additional_charges: 0,
-        cgst,
-        sgst,
-        total,
-        payment_status: 'pending',
-      });
-    
-    return {
-      id: booking.id,
-      customerName: bookingData.customerName,
-      roomNumber: bookingData.roomNumber,
-      checkIn: bookingData.checkIn,
-      checkOut: bookingData.checkOut,
-      status: 'confirmed',
-      totalAmount,
-    };
+
+    // 5️⃣ Create Invoice
+    const days = Math.ceil(
+      (new Date(bookingData.checkOut).getTime() -
+       new Date(bookingData.checkIn).getTime()) /
+      (1000 * 60 * 60 * 24)
+    );
+
+    const roomCharges = room.price * days;
+    const cgst = roomCharges * 0.025;
+    const sgst = roomCharges * 0.025;
+    const total = roomCharges + cgst + sgst;
+
+    await supabase.from('invoices').insert({
+      booking_id: booking.id,
+      room_charges: roomCharges,
+      additional_charges: 0,
+      cgst,
+      sgst,
+      total,
+      payment_status: bookingData.advanceAmount > 0 ? 'partial' : 'pending',
+      payment_method: bookingData.advancePaymentMethod || null,
+    });
+
+    return booking;
   },
-  
+
+  // ================= UPDATE BOOKING =================
   update: async (id: string, updateData: any) => {
+
     const { data: oldBooking, error: fetchError } = await supabase
       .from('bookings')
-      .select('*, room:rooms(*)')
+      .select('id, customer_id, room_id, check_in, check_out, status')
       .eq('id', id)
       .single();
-    
+
     if (fetchError) throw fetchError;
-    
-    // Update booking
+
+    const updatePayload = {
+      check_in: updateData.checkIn,
+      check_out: updateData.checkOut,
+      status: updateData.status,
+      adults: updateData.adults,
+      children: updateData.children,
+      special_requests: updateData.specialRequests || null,
+    };
+
     const { data: booking, error: updateError } = await supabase
       .from('bookings')
-      .update({
-        check_in: updateData.checkIn,
-        check_out: updateData.checkOut,
-        status: updateData.status,
-        adults: updateData.adults,
-        children: updateData.children,
-        special_requests: updateData.specialRequests,
-      })
+      .update(updatePayload)
       .eq('id', id)
       .select()
       .single();
-    
+
     if (updateError) throw updateError;
-    
-    // Update room status based on booking status
-    if (updateData.status === 'checked_out' || updateData.status === 'cancelled') {
-      await supabase
-        .from('rooms')
-        .update({ status: 'available' })
-        .eq('id', oldBooking.room_id);
-    } else if (updateData.status === 'checked_in' || updateData.status === 'confirmed') {
-      await supabase
-        .from('rooms')
+
+    // Room Status Logic
+    if (updateData.status === 'checked_in') {
+      await supabase.from('rooms')
         .update({ status: 'occupied' })
         .eq('id', oldBooking.room_id);
     }
-    
+
+    if (updateData.status === 'checked_out' ||
+        updateData.status === 'cancelled') {
+      await supabase.from('rooms')
+        .update({ status: 'available' })
+        .eq('id', oldBooking.room_id);
+    }
+
     return booking;
   },
 };
-
 // Invoices API
 export const invoicesApi = {
   getAll: async (status?: string) => {
     let query = supabase
       .from('invoices')
       .select(`
-        *,
+        id,
+        booking_id,
+        room_charges,
+        additional_charges,
+        cgst,
+        sgst,
+        total,
+        payment_status,
+        payment_method,
+        created_at,
         booking:bookings(
-          *,
-          customer:customers(*),
+          id,
+          customer_id,
+          room_id,
+          check_in,
+          check_out,
+          advance_amount,
+          advance_payment_method,
+          customer:customers(id, name, email, mobile),
           room:rooms(*)
         )
       `)
@@ -388,6 +481,8 @@ export const invoicesApi = {
       customerName: invoice.booking?.customer?.name,
       customerEmail: invoice.booking?.customer?.email,
       customerPhone: invoice.booking?.customer?.mobile,
+      // prefer gst stored on booking (added/updated at time of reservation), fall back to customer table
+      customerGstNumber: invoice.booking?.customer_gst_number || invoice.booking?.customer?.gst_number || invoice.booking?.customer?.gstNumber || '',
       roomNumber: invoice.booking?.room?.room_number,
       roomType: typeMap[invoice.booking?.room?.type] || invoice.booking?.room?.type,
       checkIn: invoice.booking?.check_in,
@@ -398,7 +493,10 @@ export const invoicesApi = {
       cgst: parseFloat(invoice.cgst),
       sgst: parseFloat(invoice.sgst),
       total: parseFloat(invoice.total),
+      advanceAmount: parseFloat(invoice.booking?.advance_amount || 0),
+      advancePaymentMethod: invoice.booking?.advance_payment_method,
       paymentStatus: invoice.payment_status,
+      paymentMethod: invoice.payment_method,
       invoiceDate: invoice.created_at.split('T')[0],
       createdAt: invoice.created_at,
     }));
@@ -408,10 +506,25 @@ export const invoicesApi = {
     const { data, error } = await supabase
       .from('invoices')
       .select(`
-        *,
+        id,
+        booking_id,
+        room_charges,
+        additional_charges,
+        cgst,
+        sgst,
+        total,
+        payment_status,
+        payment_method,
+        created_at,
         booking:bookings(
-          *,
-          customer:customers(*),
+          id,
+          customer_id,
+          room_id,
+          check_in,
+          check_out,
+          advance_amount,
+          advance_payment_method,
+          customer:customers(id, name, email, mobile),
           room:rooms(*)
         )
       `)
@@ -434,6 +547,8 @@ export const invoicesApi = {
       customerName: data.booking?.customer?.name,
       customerEmail: data.booking?.customer?.email,
       customerPhone: data.booking?.customer?.mobile,
+      // GST number coming from booking record first, then customer
+      customerGstNumber: data.booking?.customer_gst_number || data.booking?.customer?.gst_number || data.booking?.customer?.gstNumber || '',
       roomNumber: data.booking?.room?.room_number,
       roomType: typeMap[data.booking?.room?.type] || data.booking?.room?.type,
       checkIn: data.booking?.check_in,
@@ -444,8 +559,12 @@ export const invoicesApi = {
       cgst: parseFloat(data.cgst),
       sgst: parseFloat(data.sgst),
       total: parseFloat(data.total),
+      advanceAmount: parseFloat(data.booking?.advance_amount || 0),
+      advancePaymentMethod: data.booking?.advance_payment_method,
       paymentStatus: data.payment_status,
+      paymentMethod: data.payment_method,
       invoiceDate: data.created_at.split('T')[0],
+      createdAt: data.created_at,
     };
   },
   
@@ -712,7 +831,13 @@ export const customersApi = {
     let query = supabase
       .from('customers')
       .select(`
-        *,
+        id,
+        name,
+        mobile,
+        email,
+        aadhar_encrypted,
+        address,
+        created_at,
         bookings(
           id,
           check_out,
@@ -759,7 +884,15 @@ export const customersApi = {
   getById: async (id: string) => {
     const { data: customer, error: customerError } = await supabase
       .from('customers')
-      .select('*')
+      .select(`
+        id,
+        name,
+        mobile,
+        email,
+        aadhar_encrypted,
+        address,
+        created_at
+      `)
       .eq('id', id)
       .single();
     

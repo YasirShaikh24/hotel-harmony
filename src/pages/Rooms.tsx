@@ -43,7 +43,6 @@ function EditRoomModal({ room, isOpen, onClose }: EditRoomModalProps) {
   const [formData, setFormData] = useState({
     type: room.type,
     price: room.price.toString(),
-    status: room.status,
   });
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -106,32 +105,6 @@ function EditRoomModal({ room, isOpen, onClose }: EditRoomModalProps) {
               onChange={(e) => setFormData({ ...formData, price: e.target.value })}
               required
             />
-          </div>
-
-          <div className="space-y-2">
-            <Label>Status</Label>
-            <div className="flex gap-4">
-              <label className="flex items-center space-x-2">
-                <input
-                  type="radio"
-                  name="status"
-                  value="available"
-                  checked={formData.status === 'available'}
-                  onChange={(e) => setFormData({ ...formData, status: e.target.value })}
-                />
-                <span>Available</span>
-              </label>
-              <label className="flex items-center space-x-2">
-                <input
-                  type="radio"
-                  name="status"
-                  value="occupied"
-                  checked={formData.status === 'occupied'}
-                  onChange={(e) => setFormData({ ...formData, status: e.target.value })}
-                />
-                <span>Occupied</span>
-              </label>
-            </div>
           </div>
 
           <div className="flex gap-2 pt-4">

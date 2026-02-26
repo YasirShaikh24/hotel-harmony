@@ -1,4 +1,4 @@
-const CACHE_NAME = 'hotel-krishna-v1.0.0';
+const CACHE_NAME = 'hotel-krishna-v1.0.1';
 const urlsToCache = [
   '/',
   '/index.html',
@@ -31,18 +31,32 @@ self.addEventListener('activate', (event) => {
 
 // Fetch event - network first, then cache
 self.addEventListener('fetch', (event) => {
+  const url = event.request.url;
+  
+  // Skip service worker for external APIs (Supabase, etc.)
+  if (url.includes('supabase.co') || 
+      url.includes('api.') || 
+      url.startsWith('chrome-extension://')) {
+    // Let the browser handle these requests normally
+    return;
+  }
+
+  // Only cache same-origin requests
+  if (!url.startsWith(self.location.origin)) {
+    return;
+  }
+
   event.respondWith(
     fetch(event.request)
       .then((response) => {
-        // Clone the response
-        const responseToCache = response.clone();
-        
-        // Cache the fetched response
-        caches.open(CACHE_NAME)
-          .then((cache) => {
-            cache.put(event.request, responseToCache);
-          });
-        
+        // Only cache successful responses
+        if (response && response.status === 200) {
+          const responseToCache = response.clone();
+          caches.open(CACHE_NAME)
+            .then((cache) => {
+              cache.put(event.request, responseToCache);
+            });
+        }
         return response;
       })
       .catch(() => {

@@ -9,7 +9,7 @@ import { Label } from '@/components/ui/label';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Calendar } from '@/components/ui/calendar';
-import { CalendarCheck, Users, Phone, Mail, Plus, Eye, Edit, LogIn, LogOut, CalendarIcon } from 'lucide-react';
+import { CalendarCheck, Users, Phone, Mail, Plus, Eye, Edit, LogIn, LogOut, CalendarIcon, Search } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { bookingsApi, roomsApi } from '@/services/api';
 import { useToast } from '@/hooks/use-toast';
@@ -936,6 +936,7 @@ export default function Bookings() {
   const [filter, setFilter] = useState<string>('');
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
   const [showAllBookings, setShowAllBookings] = useState(false);
+  const [searchQuery, setSearchQuery] = useState<string>('');
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -994,9 +995,19 @@ export default function Bookings() {
     return dateB - dateA; // Newest first
   }) : [];
 
+  // Filter by search query (customer name or room number)
+  const searchFilteredBookings = sortedBookings.filter((booking: Booking) => {
+    if (!searchQuery.trim()) return true;
+    const query = searchQuery.toLowerCase();
+    return (
+      booking.customerName?.toLowerCase().includes(query) ||
+      booking.roomNumber?.toLowerCase().includes(query)
+    );
+  });
+
   const displayBookings = isCustomer 
-    ? filterBookingsByDate(sortedBookings.filter((booking: Booking) => booking.customerEmail === user?.email))
-    : filterBookingsByDate(sortedBookings);
+    ? filterBookingsByDate(searchFilteredBookings.filter((booking: Booking) => booking.customerEmail === user?.email))
+    : filterBookingsByDate(searchFilteredBookings);
 
   if (isLoading) {
     return (
@@ -1154,6 +1165,22 @@ export default function Bookings() {
           </div>
         )}
 
+        {/* Search Bar */}
+        <Card>
+          <CardContent className="p-4">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                type="text"
+                placeholder="Search by customer name or room number..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="pl-10"
+              />
+            </div>
+          </CardContent>
+        </Card>
+
         {/* Bookings List */}
         <div className="space-y-4">
           {displayBookings?.length === 0 ? (
@@ -1162,9 +1189,11 @@ export default function Bookings() {
                 <CalendarCheck className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
                 <h3 className="text-lg font-medium mb-2">No bookings found</h3>
                 <p className="text-muted-foreground mb-4">
-                  {isCustomer 
-                    ? "You don't have any bookings yet."
-                    : "No bookings match the current filter."
+                  {searchQuery 
+                    ? `No bookings match "${searchQuery}"`
+                    : isCustomer 
+                      ? "You don't have any bookings yet."
+                      : "No bookings match the current filter."
                   }
                 </p>
                 {!isCustomer && (

@@ -153,14 +153,6 @@ export default function Login() {
                 </Button>
               </form>
             </CardContent>
-            <CardFooter className="flex flex-col gap-4 pt-0">
-              <p className="text-center text-sm text-muted-foreground">
-                Don't have an account?{' '}
-                <Link to="/register" className="text-primary hover:underline font-medium">
-                  Sign up
-                </Link>
-              </p>
-            </CardFooter>
           </Card>
         </div>
       </div>

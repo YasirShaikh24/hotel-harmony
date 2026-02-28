@@ -4,11 +4,12 @@ import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Calendar } from '@/components/ui/calendar';
 import { Label } from '@/components/ui/label';
-import { Receipt, Download, Eye, CreditCard, Clock, CheckCircle, MessageCircle, CalendarIcon, ChevronDown, ChevronUp } from 'lucide-react';
+import { Receipt, Download, Eye, CreditCard, Clock, CheckCircle, MessageCircle, CalendarIcon, ChevronDown, ChevronUp, Search } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { invoicesApi } from '@/services/api';
 import { useToast } from '@/hooks/use-toast';
@@ -45,6 +46,7 @@ interface ViewInvoiceModalProps {
   invoice: Invoice | null;
   isOpen: boolean;
   onClose: () => void;
+  allInvoices?: Invoice[];
 }
 
 interface PaymentModalProps {
@@ -79,7 +81,25 @@ const getPaymentStatusIcon = (status: string) => {
   }
 };
 
-function ViewInvoiceModal({ invoice, isOpen, onClose }: ViewInvoiceModalProps) {
+// Generate human-readable invoice number
+const formatInvoiceNumber = (invoiceId: string, invoiceDate: string, allInvoices?: Invoice[]) => {
+  // If we have all invoices, calculate sequential number based on date order
+  if (allInvoices) {
+    const sortedByDate = [...allInvoices].sort((a, b) => 
+      new Date(a.createdAt || a.invoiceDate).getTime() - new Date(b.createdAt || b.invoiceDate).getTime()
+    );
+    const index = sortedByDate.findIndex(inv => inv.id === invoiceId);
+    const sequentialNumber = String(index + 1).padStart(3, '0');
+    return `INV-${sequentialNumber}`;
+  }
+  
+  // Fallback: use last 3 characters of UUID as number
+  const shortId = parseInt(invoiceId.slice(-6), 16) % 1000;
+  const sequentialNumber = String(shortId).padStart(3, '0');
+  return `INV-${sequentialNumber}`;
+};
+
+function ViewInvoiceModal({ invoice, isOpen, onClose, allInvoices }: ViewInvoiceModalProps) {
   if (!invoice) return null;
 
   return (
@@ -126,7 +146,7 @@ function ViewInvoiceModal({ invoice, isOpen, onClose }: ViewInvoiceModalProps) {
               <div className="mt-4 space-y-1 text-sm">
                 <div>
                   <span className="font-medium">Invoice #:</span>{" "}
-                  {invoice.id}
+                  {formatInvoiceNumber(invoice.id, invoice.invoiceDate, allInvoices)}
                 </div>
                 <div>
                   <span className="font-medium">Date:</span>{" "}
@@ -416,6 +436,7 @@ export default function Billing() {
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
   const [showAllInvoices, setShowAllInvoices] = useState(false);
   const [expandedCards, setExpandedCards] = useState<string[]>([]);
+  const [searchQuery, setSearchQuery] = useState<string>('');
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -472,10 +493,20 @@ export default function Billing() {
     return dateB - dateA; // Newest first
   }) : [];
 
+  // Filter by search query (customer name or room number)
+  const searchFilteredInvoices = sortedInvoices.filter((invoice: Invoice) => {
+    if (!searchQuery.trim()) return true;
+    const query = searchQuery.toLowerCase();
+    return (
+      invoice.customerName?.toLowerCase().includes(query) ||
+      invoice.roomNumber?.toLowerCase().includes(query)
+    );
+  });
+
   // Filter invoices for customers to show only their own
   const displayInvoices = isCustomer 
-    ? filterInvoicesByDate(sortedInvoices.filter((invoice: Invoice) => invoice.customerEmail === user?.email))
-    : filterInvoicesByDate(sortedInvoices);
+    ? filterInvoicesByDate(searchFilteredInvoices.filter((invoice: Invoice) => invoice.customerEmail === user?.email))
+    : filterInvoicesByDate(searchFilteredInvoices);
 
   const handleDownloadPdf = (invoice: Invoice) => {
   const doc = new jsPDF();
@@ -500,7 +531,7 @@ export default function Billing() {
 
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(9);
-  doc.text(`Invoice #: ${invoice.id}`, 160, y + 6, { align: 'right' });
+  doc.text(`Invoice #: ${formatInvoiceNumber(invoice.id, invoice.invoiceDate, invoices)}`, 160, y + 6, { align: 'right' });
   doc.text(
     `Date: ${new Date(invoice.invoiceDate).toLocaleDateString('en-IN')}`,
     160,
@@ -552,7 +583,7 @@ export default function Billing() {
   y += 10;
   doc.setFont('helvetica', 'bold');
   doc.text('Description', 20, y);
-  doc.text('Amount (₹)', 180, y, { align: 'right' });
+  doc.text('Amount (Rs.)', 180, y, { align: 'right' });
 
   y += 3;
   doc.line(20, y, 190, y);
@@ -595,7 +626,25 @@ export default function Billing() {
     );
   }
 
-  y += 20;
+  // Payment Status
+  y += 15;
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(10);
+  const statusText = invoice.paymentStatus === 'paid' 
+    ? 'PAYMENT STATUS: PAID' 
+    : invoice.paymentStatus === 'partial'
+    ? 'PAYMENT STATUS: PARTIALLY PAID'
+    : 'PAYMENT STATUS: PENDING';
+  doc.text(statusText, 20, y);
+  
+  if (invoice.paymentMethod && invoice.paymentStatus === 'paid') {
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(9);
+    y += 6;
+    doc.text('Payment Method: ' + invoice.paymentMethod, 20, y);
+  }
+
+  y += 10;
   doc.line(20, y, 190, y);
 
   y += 10;
@@ -603,7 +652,8 @@ export default function Billing() {
   doc.setFont('helvetica', 'normal');
   doc.text('Thank you for staying with us.', 105, y, { align: 'center' });
 
-  doc.save(`Invoice_${invoice.id}.pdf`);
+  const invoiceNumber = formatInvoiceNumber(invoice.id, invoice.invoiceDate, invoices);
+  doc.save(`${invoiceNumber}.pdf`);
 };
   const handleShareWhatsApp = (invoice: Invoice) => {
     try {
@@ -820,6 +870,22 @@ export default function Billing() {
           </div>
         )}
 
+        {/* Search Bar */}
+        <Card>
+          <CardContent className="p-4">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                type="text"
+                placeholder="Search by customer name or room number..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="pl-10"
+              />
+            </div>
+          </CardContent>
+        </Card>
+
         {/* Invoices List */}
         <div className="space-y-4">
           {displayInvoices?.length === 0 ? (
@@ -828,9 +894,11 @@ export default function Billing() {
                 <Receipt className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
                 <h3 className="text-lg font-medium mb-2">No invoices found</h3>
                 <p className="text-muted-foreground mb-4">
-                  {isCustomer 
-                    ? "You don't have any invoices yet."
-                    : "No invoices match the current filter."
+                  {searchQuery 
+                    ? `No invoices match "${searchQuery}"`
+                    : isCustomer 
+                      ? "You don't have any invoices yet."
+                      : "No invoices match the current filter."
                   }
                 </p>
               </CardContent>
@@ -850,7 +918,7 @@ export default function Billing() {
                         <div>
                           <CardTitle className="text-lg">Room {invoice.roomNumber} - {invoice.customerName}</CardTitle>
                           <div className="flex items-center gap-4 text-sm text-muted-foreground mt-1">
-                            <span>Invoice: {invoice.id.slice(0, 8)}</span>
+                            <span>Invoice: {formatInvoiceNumber(invoice.id, invoice.invoiceDate, invoices)}</span>
                             <span>•</span>
                             <span>{new Date(invoice.invoiceDate).toLocaleDateString()}</span>
                           </div>
@@ -1077,6 +1145,7 @@ export default function Billing() {
           invoice={viewingInvoice}
           isOpen={!!viewingInvoice}
           onClose={() => setViewingInvoice(null)}
+          allInvoices={invoices}
         />
 
         {/* Payment Modal */}

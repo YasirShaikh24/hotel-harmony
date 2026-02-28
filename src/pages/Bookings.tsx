@@ -178,6 +178,15 @@ function AddBookingModal({ isOpen, onClose }: AddBookingModalProps) {
       return;
     }
 
+    if (formData.advanceAmount > (formData.totalAmount + (formData.totalAmount * 0.05))) {
+      toast({
+        title: 'Invalid Advance Amount',
+        description: 'Advance amount cannot be more than total amount (including GST)',
+        variant: 'destructive',
+      });
+      return;
+    }
+
     if (formData.advanceAmount > 0 && !formData.advancePaymentMethod) {
       toast({
         title: 'Payment Method Required',
@@ -407,11 +416,17 @@ function AddBookingModal({ isOpen, onClose }: AddBookingModalProps) {
               id="advanceAmount"
               type="number"
               min="0"
+              max={formData.totalAmount + (formData.totalAmount * 0.05)}
               step="0.01"
               value={formData.advanceAmount || ''}
               onChange={(e) => setFormData({ ...formData, advanceAmount: parseFloat(e.target.value) || 0 })}
               placeholder="Enter advance payment amount"
             />
+            {formData.totalAmount > 0 && (
+              <p className="text-xs text-muted-foreground">
+                Maximum: ₹{(formData.totalAmount + (formData.totalAmount * 0.05)).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+              </p>
+            )}
           </div>
 
           {formData.advanceAmount > 0 && (

@@ -433,7 +433,9 @@ export default function Reports() {
                               </div>
                             </div>
                             <div className="text-right">
-                              <p className="text-2xl font-bold text-green-600">
+                              <p className={`text-2xl font-bold ${
+                                invoice.paymentMethod?.toLowerCase() === 'gpay' ? 'text-green-600' : 'text-orange-600'
+                              }`}>
                                 ₹{invoice.total.toLocaleString()}
                               </p>
                             </div>

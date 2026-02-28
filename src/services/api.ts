@@ -432,7 +432,15 @@ export const bookingsApi = {
 };
 // Invoices API
 export const invoicesApi = {
-  getAll: async (status?: string) => {
+  getAll: async (
+    status?: string,
+    opts?: {
+      date?: string;
+      search?: string;
+      customerEmail?: string;
+      limit?: number;
+    }
+  ) => {
     let query = supabase
       .from('invoices')
       .select(`
@@ -459,11 +467,34 @@ export const invoicesApi = {
         )
       `)
       .order('created_at', { ascending: false });
-    
+
     if (status) {
       query = query.eq('payment_status', status);
     }
-    
+
+    // limit/max results
+    if (opts?.limit) {
+      query = query.limit(opts.limit);
+    }
+
+    // filter by date (created_at) range
+    if (opts?.date) {
+      const start = opts.date + 'T00:00:00';
+      const end = opts.date + 'T23:59:59';
+      query = query.gte('created_at', start).lte('created_at', end);
+    }
+
+    // restrict to current customer when applicable
+    if (opts?.customerEmail) {
+      query = query.eq('booking.customer.email', opts.customerEmail);
+    }
+
+    // simple text search across customer name or room number
+    if (opts?.search) {
+      const s = `%${opts.search}%`;
+      query = query.or(`booking.customer.name.ilike.${s},booking.room.room_number.ilike.${s}`);
+    }
+
     const { data, error } = await query;
     if (error) throw error;
     

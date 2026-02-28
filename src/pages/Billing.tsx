@@ -351,12 +351,35 @@ export default function Billing() {
   const [showAllInvoices, setShowAllInvoices] = useState(false);
   const [expandedCards, setExpandedCards] = useState<string[]>([]);
   const [searchQuery, setSearchQuery] = useState<string>('');
+  const [debouncedSearch, setDebouncedSearch] = useState<string>('');
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
-  const { data: invoices, isLoading } = useQuery({
-    queryKey: ['invoices', filter],
-    queryFn: () => invoicesApi.getAll(filter),
+  // debounce search input to avoid refetching on every keystroke
+  React.useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearch(searchQuery.trim());
+    }, 400);
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
+
+  // prepare filter options for API call
+  const dateFilter = showAllInvoices ? undefined : format(selectedDate, 'yyyy-MM-dd');
+  const customerEmail = isCustomer ? user?.email : undefined;
+  const limit = showAllInvoices ? undefined : 100; // only grab recent ones when not showing all
+
+  const { data: invoices, isLoading, isFetching } = useQuery({
+    queryKey: ['invoices', filter, dateFilter, debouncedSearch, customerEmail],
+    queryFn: () =>
+      invoicesApi.getAll(filter, {
+        date: dateFilter,
+        search: debouncedSearch || undefined,
+        customerEmail,
+        limit,
+      }),
+    staleTime: 30000,
+    refetchOnWindowFocus: false,
+    refetchOnMount: false,
   });
 
   const toggleCard = (invoiceId: string) => {
@@ -767,6 +790,11 @@ export default function Billing() {
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="pl-10"
               />
+              {isFetching && (
+                <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary"></div>
+                </div>
+              )}
             </div>
           </CardContent>
         </Card>

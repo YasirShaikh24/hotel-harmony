@@ -8,9 +8,19 @@ const SUPABASE_PUBLISHABLE_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
 // Import the supabase client like this:
 // import { supabase } from "@/integrations/supabase/client";
 
+// Some browsers (iOS Safari private mode, older Android) throw when accessing localStorage.
+// Guard against that so the app doesn't crash during auth operations.
+let storage: Storage | undefined;
+try {
+  storage = localStorage;
+} catch {
+  console.warn('localStorage unavailable; falling back to in-memory storage');
+  storage = undefined;
+}
+
 export const supabase = createClient<Database>(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
   auth: {
-    storage: localStorage,
+    storage,
     persistSession: true,
     autoRefreshToken: true,
     detectSessionInUrl: true,

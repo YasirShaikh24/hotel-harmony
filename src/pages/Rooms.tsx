@@ -7,8 +7,8 @@ import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
-import { BedDouble, Users, Edit, X } from 'lucide-react';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { BedDouble, Users, Edit } from 'lucide-react';
 import { roomsApi } from '@/services/api';
 import { useToast } from '@/hooks/use-toast';
 
@@ -51,18 +51,11 @@ function EditRoomModal({ room, isOpen, onClose }: EditRoomModalProps) {
     mutationFn: (data: any) => roomsApi.update(room.id, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['rooms'] });
-      toast({
-        title: 'Success',
-        description: 'Room updated successfully',
-      });
+      toast({ title: 'Success', description: 'Room updated successfully' });
       onClose();
     },
     onError: () => {
-      toast({
-        title: 'Error',
-        description: 'Failed to update room',
-        variant: 'destructive',
-      });
+      toast({ title: 'Error', description: 'Failed to update room', variant: 'destructive' });
     },
   });
 
@@ -111,9 +104,7 @@ function EditRoomModal({ room, isOpen, onClose }: EditRoomModalProps) {
             <Button type="submit" disabled={updateRoomMutation.isPending} className="flex-1">
               {updateRoomMutation.isPending ? 'Updating...' : 'Update Room'}
             </Button>
-            <Button type="button" variant="outline" onClick={onClose}>
-              Cancel
-            </Button>
+            <Button type="button" variant="outline" onClick={onClose}>Cancel</Button>
           </div>
         </form>
       </DialogContent>
@@ -128,9 +119,14 @@ export default function Rooms() {
     queryFn: roomsApi.getAll,
   });
 
-  const totalRooms = rooms?.length || 0;
-  const availableRooms = rooms?.filter((r: Room) => r.status === 'available').length || 0;
-  const occupiedRooms = rooms?.filter((r: Room) => r.status === 'occupied').length || 0;
+  // Sort rooms numerically by room number (101, 102, 103... not 101, 110, 113)
+  const sortedRooms: Room[] = rooms
+    ? [...rooms].sort((a: Room, b: Room) => parseInt(a.roomNumber) - parseInt(b.roomNumber))
+    : [];
+
+  const totalRooms     = sortedRooms.length;
+  const availableRooms = sortedRooms.filter(r => r.status === 'available').length;
+  const occupiedRooms  = sortedRooms.filter(r => r.status === 'occupied').length;
 
   if (isLoading) {
     return (
@@ -148,14 +144,13 @@ export default function Rooms() {
   return (
     <DashboardLayout>
       <div className="space-y-6 animate-fade-in">
+
         {/* Header */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div>
-            <h1 className="text-2xl lg:text-3xl font-bold text-foreground">
-              Room Management
-            </h1>
+            <h1 className="text-2xl lg:text-3xl font-bold text-foreground">Room Management</h1>
             <p className="text-muted-foreground mt-1">
-              Manage hotel rooms and pricing (Rooms 101-117)
+              Manage hotel rooms and pricing (Rooms 101–117)
             </p>
           </div>
         </div>
@@ -201,7 +196,7 @@ export default function Rooms() {
 
         {/* Rooms Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {rooms?.map((room: Room) => (
+          {sortedRooms.map((room: Room) => (
             <Card key={room.id} className="hover:shadow-lg transition-shadow">
               <CardHeader className="pb-3">
                 <div className="flex items-center justify-between">
@@ -221,16 +216,14 @@ export default function Rooms() {
                   <span className="text-2xl font-bold text-primary">₹{room.price.toLocaleString()}</span>
                   <span className="text-sm text-muted-foreground">per night</span>
                 </div>
-
                 <div className="flex gap-2 pt-2">
-                  <Button 
-                    variant="outline" 
-                    size="sm" 
+                  <Button
+                    variant="outline"
+                    size="sm"
                     className="flex-1"
                     onClick={() => setEditingRoom(room)}
                   >
-                    <Edit className="h-4 w-4 mr-1" />
-                    Edit
+                    <Edit className="h-4 w-4 mr-1" />Edit
                   </Button>
                 </div>
               </CardContent>

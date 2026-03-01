@@ -57,172 +57,197 @@ interface PaymentModalProps {
 
 const getPaymentStatusColor = (status: string) => {
   switch (status) {
-    case 'paid':
-      return 'bg-green-100 text-green-800 border-green-200';
-    case 'partial':
-      return 'bg-blue-100 text-blue-800 border-blue-200';
-    case 'pending':
-      return 'bg-yellow-100 text-yellow-800 border-yellow-200';
-    default:
-      return 'bg-gray-100 text-gray-800 border-gray-200';
+    case 'paid': return 'bg-green-100 text-green-800 border-green-200';
+    case 'partial': return 'bg-blue-100 text-blue-800 border-blue-200';
+    case 'pending': return 'bg-yellow-100 text-yellow-800 border-yellow-200';
+    default: return 'bg-gray-100 text-gray-800 border-gray-200';
   }
 };
 
 const getPaymentStatusIcon = (status: string) => {
   switch (status) {
-    case 'paid':
-      return <CheckCircle className="h-4 w-4" />;
-    case 'partial':
-      return <Clock className="h-4 w-4" />;
-    case 'pending':
-      return <Clock className="h-4 w-4" />;
-    default:
-      return <Receipt className="h-4 w-4" />;
+    case 'paid': return <CheckCircle className="h-4 w-4" />;
+    case 'partial': return <Clock className="h-4 w-4" />;
+    case 'pending': return <Clock className="h-4 w-4" />;
+    default: return <Receipt className="h-4 w-4" />;
   }
 };
 
-// Generate human-readable invoice number
 const formatInvoiceNumber = (invoiceId: string, invoiceDate: string, allInvoices?: Invoice[]) => {
-  // If we have all invoices, calculate sequential number based on date order
   if (allInvoices) {
-    const sortedByDate = [...allInvoices].sort((a, b) => 
+    const sortedByDate = [...allInvoices].sort((a, b) =>
       new Date(a.createdAt || a.invoiceDate).getTime() - new Date(b.createdAt || b.invoiceDate).getTime()
     );
     const index = sortedByDate.findIndex(inv => inv.id === invoiceId);
     const sequentialNumber = String(index + 1).padStart(3, '0');
     return `INV-${sequentialNumber}`;
   }
-  
-  // Fallback: use last 3 characters of UUID as number
   const shortId = parseInt(invoiceId.slice(-6), 16) % 1000;
   const sequentialNumber = String(shortId).padStart(3, '0');
   return `INV-${sequentialNumber}`;
 };
 
+// ─────────────────────────────────────────────
+// VIEW INVOICE MODAL — matches the image format
+// ─────────────────────────────────────────────
 function ViewInvoiceModal({ invoice, isOpen, onClose, allInvoices }: ViewInvoiceModalProps) {
   if (!invoice) return null;
 
+  const currency = (num: number) =>
+    'Rs.' + num.toLocaleString('en-IN', { minimumFractionDigits: 2 });
+
+  const invoiceNumber = formatInvoiceNumber(invoice.id, invoice.invoiceDate, allInvoices);
+
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="sm:max-w-4xl max-h-[90vh] overflow-y-auto bg-white p-0">
-        <div className="p-12 bg-white text-gray-900">
+      <DialogContent className="sm:max-w-2xl max-h-[95vh] overflow-y-auto p-0 bg-white">
+        {/* Invoice body — white background, clean typography */}
+        <div className="p-10 bg-white text-gray-900 font-sans">
 
-          {/* HEADER WITH LOGO */}
-          <div className="grid grid-cols-2 items-start">
-            <div className="flex items-start gap-4">
+          {/* ── HEADER ── */}
+          <div className="flex items-start justify-between">
+            {/* Left: Logo + Hotel name */}
+            <div className="flex items-center gap-4">
               <img
                 src="/hk.png"
                 alt="Hotel Krishna"
-                className="h-16 w-16 object-contain"
-                onError={(e) => { e.currentTarget.style.display = "none"; }}
+                className="h-16 w-16 rounded-full object-contain border-2 border-[#1a3a5c]"
+                onError={(e) => {
+                  const el = e.currentTarget as HTMLImageElement;
+                  el.style.display = 'none';
+                }}
               />
               <div>
-                <h1 className="text-3xl font-semibold tracking-wide">HOTEL KRISHNA</h1>
-                <p className="text-sm text-gray-600 mt-2">1st Floor Lalita Tower, Vadodara - 390005</p>
-                <p className="text-sm text-gray-600">Phone: +91 9426786111 | info@hotelkrishna.com</p>
+                <h1 className="text-2xl font-bold tracking-wide text-gray-900">HOTEL KRISHNA</h1>
+                <p className="text-xs text-gray-500 mt-1">1st Floor Lalita Tower, Vadodara - 390005</p>
+                <p className="text-xs text-gray-500">Phone: +91 9638003036 | info@hotelkrishna.com</p>
               </div>
             </div>
+            {/* Right: TAX INVOICE label + meta */}
             <div className="text-right">
-              <h2 className="text-lg font-semibold uppercase tracking-widest">Tax Invoice</h2>
-              <div className="mt-4 space-y-1 text-sm">
-                <div><span className="font-medium">Invoice #:</span> {formatInvoiceNumber(invoice.id, invoice.invoiceDate, allInvoices)}</div>
-                <div><span className="font-medium">Date:</span> {new Date(invoice.invoiceDate).toLocaleDateString("en-IN")}</div>
-              </div>
+              <h2 className="text-2xl font-bold text-gray-900 uppercase tracking-wider">TAX INVOICE</h2>
+              <p className="text-xs text-gray-600 mt-2">Invoice #: {invoiceNumber}</p>
+              <p className="text-xs text-gray-600">Date: {new Date(invoice.invoiceDate).toLocaleDateString('en-IN')}</p>
             </div>
           </div>
 
-          <div className="border-t border-gray-400 my-8"></div>
+          <hr className="border-gray-300 my-6" />
 
-          {/* BILL TO & STAY DETAILS */}
-          <div className="grid grid-cols-2 gap-24 text-sm">
+          {/* ── BILL TO & STAY DETAILS ── */}
+          <div className="grid grid-cols-2 gap-8 text-sm">
             <div>
-              <h3 className="uppercase text-xs tracking-widest text-gray-500 mb-3">Bill To</h3>
-              <p className="font-medium">{invoice.customerName}</p>
-              {invoice.customer2Name && <p>{invoice.customer2Name}</p>}
-              <p>{invoice.customerEmail}</p>
-              <p>{invoice.customerPhone}</p>
-              {invoice.customerGstNumber && invoice.customerGstNumber.trim() !== "" && (
-                <div className="mt-3">
-                  <p className="text-xs uppercase tracking-wide text-gray-500">Customer GSTIN</p>
-                  <p className="font-medium text-gray-800">{invoice.customerGstNumber}</p>
-                </div>
+              <p className="text-xs uppercase tracking-widest text-gray-400 mb-2">Bill To</p>
+              <p className="font-semibold text-gray-900">{invoice.customerName}</p>
+              {invoice.customer2Name && <p className="text-gray-700">{invoice.customer2Name}</p>}
+              <p className="text-gray-600">{invoice.customerEmail}</p>
+              <p className="text-gray-600">{invoice.customerPhone}</p>
+              {invoice.customerGstNumber && invoice.customerGstNumber.trim() !== '' && (
+                <p className="text-gray-600 mt-1">GSTIN: {invoice.customerGstNumber}</p>
               )}
             </div>
             <div>
-              <h3 className="uppercase text-xs tracking-widest text-gray-500 mb-3">Stay Details</h3>
-              <p>Room: {invoice.roomNumber}</p>
-              <p>Check-in: {new Date(invoice.checkIn).toLocaleDateString("en-IN")}</p>
-              <p>Check-out: {new Date(invoice.checkOut).toLocaleDateString("en-IN")}</p>
-              <p>Duration: {invoice.days} Night(s)</p>
+              <p className="text-xs uppercase tracking-widest text-gray-400 mb-2">Stay Details</p>
+              <p className="text-gray-700">Room: {invoice.roomNumber}</p>
+              <p className="text-gray-700">Check-in: {new Date(invoice.checkIn).toLocaleDateString('en-IN')}</p>
+              <p className="text-gray-700">Check-out: {new Date(invoice.checkOut).toLocaleDateString('en-IN')}</p>
+              <p className="text-gray-700">Duration: {invoice.days} Night{invoice.days > 1 ? 's' : ''}</p>
             </div>
           </div>
 
-          <div className="border-t border-gray-400 my-8"></div>
+          <hr className="border-gray-300 my-6" />
 
-          {/* TABLE */}
+          {/* ── CHARGES TABLE ── */}
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b border-gray-400 text-left uppercase text-xs tracking-widest text-gray-500">
-                <th className="py-3">Description</th>
-                <th className="py-3 text-right">Amount (₹)</th>
+              <tr className="border-b border-gray-300">
+                <th className="text-left py-2 text-xs uppercase tracking-widest text-gray-400 font-medium">Description</th>
+                <th className="text-right py-2 text-xs uppercase tracking-widest text-gray-400 font-medium">Amount (Rs.)</th>
               </tr>
             </thead>
             <tbody>
-              <tr>
-                <td className="py-3">Room Charges ({invoice.days} night{invoice.days > 1 ? 's' : ''})</td>
-                <td className="py-3 text-right">{invoice.roomCharges.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</td>
+              {/* Room Charges */}
+              <tr className="border-b border-gray-100">
+                <td className="py-3 text-gray-800">Room Charges ({invoice.days} night{invoice.days > 1 ? 's' : ''})</td>
+                <td className="py-3 text-right text-gray-800">{currency(invoice.roomCharges)}</td>
               </tr>
+
+              {/* Additional Charges — only if > 0 */}
               {invoice.additionalCharges > 0 && (
-                <tr>
-                  <td className="py-3">Additional Charges</td>
-                  <td className="py-3 text-right">{invoice.additionalCharges.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</td>
+                <tr className="border-b border-gray-100">
+                  <td className="py-3 text-gray-800">Additional Charges</td>
+                  <td className="py-3 text-right text-gray-800">{currency(invoice.additionalCharges)}</td>
                 </tr>
               )}
-              <tr>
-                <td className="py-3">GST (5%)</td>
-                <td className="py-3 text-right">{(invoice.cgst + invoice.sgst).toLocaleString("en-IN", { minimumFractionDigits: 2 })}</td>
+
+              {/* GST combined */}
+              <tr className="border-b border-gray-100">
+                <td className="py-3 text-gray-800">GST (5%)</td>
+                <td className="py-3 text-right text-gray-800">{currency(invoice.cgst + invoice.sgst)}</td>
               </tr>
-              {invoice.advanceAmount && invoice.advanceAmount > 0 && (
-                <>
-                  <tr>
-                    <td className="py-3">Advance Paid{invoice.advancePaymentMethod ? ` (${invoice.advancePaymentMethod})` : ''}</td>
-                    <td className="py-3 text-right text-green-600">-{invoice.advanceAmount.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</td>
-                  </tr>
-                  {invoice.paymentStatus === 'paid' && invoice.paymentMethod && (
-                    <tr>
-                      <td className="py-3">Remaining Paid ({invoice.paymentMethod})</td>
-                      <td className="py-3 text-right text-green-600">-{(invoice.total - invoice.advanceAmount).toLocaleString("en-IN", { minimumFractionDigits: 2 })}</td>
-                    </tr>
-                  )}
-                </>
+
+              {/* Advance Paid — green */}
+              {invoice.advanceAmount != null && invoice.advanceAmount > 0 && (
+                <tr className="border-b border-gray-100">
+                  <td className="py-3 text-[#16a34a]">
+                    Advance Paid{invoice.advancePaymentMethod ? ` (${invoice.advancePaymentMethod})` : ''}
+                  </td>
+                  <td className="py-3 text-right text-[#16a34a]">-{currency(invoice.advanceAmount)}</td>
+                </tr>
               )}
-              <tr className="border-t border-gray-400 font-semibold">
-                <td className="py-4 text-base">Total Amount</td>
-                <td className="py-4 text-right text-base">{invoice.total.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</td>
+
+              {/* Remaining Paid — green, only when fully paid and advance exists */}
+              {invoice.paymentStatus === 'paid' &&
+                invoice.paymentMethod &&
+                invoice.advanceAmount != null &&
+                invoice.advanceAmount > 0 && (
+                  <tr className="border-b border-gray-100">
+                    <td className="py-3 text-[#16a34a]">Remaining Paid ({invoice.paymentMethod})</td>
+                    <td className="py-3 text-right text-[#16a34a]">
+                      -{currency(invoice.total - invoice.advanceAmount)}
+                    </td>
+                  </tr>
+                )}
+
+              {/* Total Amount row */}
+              <tr className="border-t-2 border-gray-300">
+                <td className="pt-4 pb-2 font-bold text-base text-gray-900">Total Amount</td>
+                <td className="pt-4 pb-2 text-right font-bold text-base text-gray-900">{currency(invoice.total)}</td>
               </tr>
             </tbody>
           </table>
 
-          {/* Payment Info */}
-          {invoice.paymentStatus === 'paid' && (
-            <div className="mt-6 pt-4 border-t border-gray-200 text-sm space-y-1 text-gray-600">
-              {invoice.advancePaymentMethod && (
-                <p>Initial Payment Mode: <span className="font-medium text-gray-800">{invoice.advancePaymentMethod}</span></p>
-              )}
-              {invoice.paymentMethod && (
-                <p>Final Payment Mode: <span className="font-medium text-gray-800">{invoice.paymentMethod}</span></p>
-              )}
-              <p className="font-semibold text-green-600 mt-2">
-                Fully Paid on {new Date(invoice.invoiceDate).toLocaleDateString("en-IN", { day: '2-digit', month: 'short', year: 'numeric' })}
+          {/* ── PAYMENT INFO (below total, matching image) ── */}
+          <hr className="border-gray-200 mt-4 mb-4" />
+          <div className="text-sm space-y-1 text-gray-600">
+            {invoice.advancePaymentMethod && (
+              <p>Initial Payment Mode: {invoice.advancePaymentMethod}</p>
+            )}
+            {invoice.paymentMethod && (
+              <p>Final Payment Mode: {invoice.paymentMethod}</p>
+            )}
+            {invoice.paymentStatus === 'paid' && (
+              <p className="font-bold text-[#16a34a] mt-1">
+                Fully Paid on{' '}
+                {new Date(invoice.invoiceDate).toLocaleDateString('en-IN', {
+                  day: '2-digit',
+                  month: 'short',
+                  year: 'numeric',
+                })}
               </p>
-            </div>
-          )}
-
-          <div className="border-t border-gray-400 mt-12 pt-6 text-center text-xs text-gray-500">
-            Thank you for staying with Hotel Krishna.
+            )}
+            {invoice.paymentStatus === 'partial' && (
+              <p className="font-bold text-orange-500 mt-1">Partially Paid</p>
+            )}
+            {invoice.paymentStatus === 'pending' && (
+              <p className="font-bold text-red-500 mt-1">Payment Pending</p>
+            )}
           </div>
 
-          <div className="mt-8">
+          {/* ── FOOTER ── */}
+          <hr className="border-gray-200 mt-8 mb-4" />
+          <p className="text-center text-xs text-gray-400">Thank you for staying with Hotel Krishna.</p>
+
+          <div className="mt-6">
             <Button onClick={onClose} className="w-full">Close</Button>
           </div>
         </div>
@@ -231,6 +256,9 @@ function ViewInvoiceModal({ invoice, isOpen, onClose, allInvoices }: ViewInvoice
   );
 }
 
+// ─────────────────────────────────────────────
+// PAYMENT MODAL
+// ─────────────────────────────────────────────
 function PaymentModal({ invoice, isOpen, onClose }: PaymentModalProps) {
   const [paymentMethod, setPaymentMethod] = useState<'Cash' | 'GPay'>('Cash');
   const { toast } = useToast();
@@ -273,16 +301,16 @@ function PaymentModal({ invoice, isOpen, onClose }: PaymentModalProps) {
               <div className="flex justify-between items-center">
                 <span className="text-sm font-medium text-gray-700">Total Amount:</span>
                 <span className="text-lg font-bold text-blue-600">
-                  ₹{invoice.total.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  ₹{invoice.total.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                 </span>
               </div>
-              {invoice.advanceAmount > 0 && (
+              {invoice.advanceAmount != null && invoice.advanceAmount > 0 && (
                 <div className="flex justify-between items-center mt-2">
                   <span className="text-sm font-medium text-gray-700">
                     {invoice.paymentStatus === 'partial' ? 'Advance Paid:' : 'Previous Payment:'}
                   </span>
                   <span className="text-sm font-medium text-green-600">
-                    -₹{invoice.advanceAmount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    -₹{invoice.advanceAmount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                   </span>
                 </div>
               )}
@@ -291,7 +319,7 @@ function PaymentModal({ invoice, isOpen, onClose }: PaymentModalProps) {
                   {invoice.paymentStatus === 'partial' ? 'Amount to Pay:' : 'Total Amount:'}
                 </span>
                 <span className="text-xl font-bold text-orange-600">
-                  ₹{amountToPay.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  ₹{amountToPay.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                 </span>
               </div>
               <div className="mt-2 text-xs text-gray-600">
@@ -302,30 +330,35 @@ function PaymentModal({ invoice, isOpen, onClose }: PaymentModalProps) {
             <div className="space-y-3">
               <Label className="text-base font-semibold">Select Payment Method</Label>
               <div className="space-y-3">
-                <label className="flex items-center p-4 border-2 rounded-lg cursor-pointer transition-all hover:bg-gray-50"
-                  style={{ borderColor: paymentMethod === 'Cash' ? '#2563eb' : '#e5e7eb', backgroundColor: paymentMethod === 'Cash' ? '#eff6ff' : 'white' }}>
-                  <input type="radio" name="paymentMethod" value="Cash" checked={paymentMethod === 'Cash'}
-                    onChange={(e) => setPaymentMethod(e.target.value as 'Cash' | 'GPay')} className="w-5 h-5 text-blue-600" />
-                  <div className="ml-3 flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-full bg-green-100 flex items-center justify-center"><span className="text-xl">💵</span></div>
-                    <div>
-                      <span className="font-semibold text-gray-900">Cash Payment</span>
-                      <p className="text-xs text-gray-600">Physical currency payment</p>
+                {(['Cash', 'GPay'] as const).map((method) => (
+                  <label
+                    key={method}
+                    className="flex items-center p-4 border-2 rounded-lg cursor-pointer transition-all hover:bg-gray-50"
+                    style={{
+                      borderColor: paymentMethod === method ? '#2563eb' : '#e5e7eb',
+                      backgroundColor: paymentMethod === method ? '#eff6ff' : 'white',
+                    }}
+                  >
+                    <input
+                      type="radio"
+                      name="paymentMethod"
+                      value={method}
+                      checked={paymentMethod === method}
+                      onChange={(e) => setPaymentMethod(e.target.value as 'Cash' | 'GPay')}
+                      className="w-5 h-5 text-blue-600"
+                    />
+                    <div className="ml-3 flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-full flex items-center justify-center"
+                        style={{ backgroundColor: method === 'Cash' ? '#dcfce7' : '#dbeafe' }}>
+                        <span className="text-xl">{method === 'Cash' ? '💵' : '📱'}</span>
+                      </div>
+                      <div>
+                        <span className="font-semibold text-gray-900">{method === 'Cash' ? 'Cash Payment' : 'GPay / UPI'}</span>
+                        <p className="text-xs text-gray-600">{method === 'Cash' ? 'Physical currency payment' : 'Digital payment via UPI'}</p>
+                      </div>
                     </div>
-                  </div>
-                </label>
-                <label className="flex items-center p-4 border-2 rounded-lg cursor-pointer transition-all hover:bg-gray-50"
-                  style={{ borderColor: paymentMethod === 'GPay' ? '#2563eb' : '#e5e7eb', backgroundColor: paymentMethod === 'GPay' ? '#eff6ff' : 'white' }}>
-                  <input type="radio" name="paymentMethod" value="GPay" checked={paymentMethod === 'GPay'}
-                    onChange={(e) => setPaymentMethod(e.target.value as 'Cash' | 'GPay')} className="w-5 h-5 text-blue-600" />
-                  <div className="ml-3 flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center"><span className="text-xl">📱</span></div>
-                    <div>
-                      <span className="font-semibold text-gray-900">GPay / UPI</span>
-                      <p className="text-xs text-gray-600">Digital payment via UPI</p>
-                    </div>
-                  </div>
-                </label>
+                  </label>
+                ))}
               </div>
             </div>
           </div>
@@ -342,6 +375,9 @@ function PaymentModal({ invoice, isOpen, onClose }: PaymentModalProps) {
   );
 }
 
+// ─────────────────────────────────────────────
+// MAIN BILLING PAGE
+// ─────────────────────────────────────────────
 export default function Billing() {
   const { user, isCustomer } = useAuth();
   const [filter, setFilter] = useState<string>('');
@@ -355,28 +391,18 @@ export default function Billing() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
-  // debounce search input to avoid refetching on every keystroke
   React.useEffect(() => {
-    const timer = setTimeout(() => {
-      setDebouncedSearch(searchQuery.trim());
-    }, 400);
+    const timer = setTimeout(() => { setDebouncedSearch(searchQuery.trim()); }, 400);
     return () => clearTimeout(timer);
   }, [searchQuery]);
 
-  // prepare filter options for API call
   const dateFilter = showAllInvoices ? undefined : format(selectedDate, 'yyyy-MM-dd');
   const customerEmail = isCustomer ? user?.email : undefined;
-  const limit = showAllInvoices ? undefined : 100; // only grab recent ones when not showing all
+  const limit = showAllInvoices ? undefined : 100;
 
   const { data: invoices, isLoading, isFetching } = useQuery({
     queryKey: ['invoices', filter, dateFilter, debouncedSearch, customerEmail],
-    queryFn: () =>
-      invoicesApi.getAll(filter, {
-        date: dateFilter,
-        search: debouncedSearch || undefined,
-        customerEmail,
-        limit,
-      }),
+    queryFn: () => invoicesApi.getAll(filter, { date: dateFilter, search: debouncedSearch || undefined, customerEmail, limit }),
     staleTime: 30000,
     refetchOnWindowFocus: false,
     refetchOnMount: false,
@@ -406,245 +432,286 @@ export default function Billing() {
     return invoicesList.filter((invoice: Invoice) => invoice.invoiceDate === selectedDateStr);
   };
 
-  // Sort invoices by creation date (newest first)
-  const sortedInvoices = invoices ? [...invoices].sort((a: Invoice, b: Invoice) => {
-    const dateA = new Date(a.createdAt || a.invoiceDate).getTime();
-    const dateB = new Date(b.createdAt || b.invoiceDate).getTime();
-    return dateB - dateA; // Newest first
-  }) : [];
+  const sortedInvoices = invoices ? [...invoices].sort((a: Invoice, b: Invoice) =>
+    new Date(b.createdAt || b.invoiceDate).getTime() - new Date(a.createdAt || a.invoiceDate).getTime()
+  ) : [];
 
-  // Filter by search query (customer name or room number)
   const searchFilteredInvoices = sortedInvoices.filter((invoice: Invoice) => {
     if (!searchQuery.trim()) return true;
     const query = searchQuery.toLowerCase();
-    return (
-      invoice.customerName?.toLowerCase().includes(query) ||
-      invoice.roomNumber?.toLowerCase().includes(query)
-    );
+    return invoice.customerName?.toLowerCase().includes(query) || invoice.roomNumber?.toLowerCase().includes(query);
   });
 
-  // Filter invoices for customers to show only their own
-  const displayInvoices = isCustomer 
+  const displayInvoices = isCustomer
     ? filterInvoicesByDate(searchFilteredInvoices.filter((invoice: Invoice) => invoice.customerEmail === user?.email))
     : filterInvoicesByDate(searchFilteredInvoices);
 
-  // ── PDF DOWNLOAD ────────────────────────────────────────────────────
+  // ─────────────────────────────────────────────
+  // PDF DOWNLOAD — matches the exact invoice image
+  // ─────────────────────────────────────────────
   const handleDownloadPdf = (invoice: Invoice) => {
     const doc = new jsPDF({ unit: 'pt', format: 'a4' });
     const pageWidth = doc.internal.pageSize.getWidth();
-    const pageHeight = doc.internal.pageSize.getHeight();
-    const margin = 40;
+    const margin = 45;
     const contentWidth = pageWidth - margin * 2;
 
     const currency = (num: number) =>
       'Rs.' + num.toLocaleString('en-IN', { minimumFractionDigits: 2 });
 
+    // Colour palette
+    const black: [number, number, number] = [17, 24, 39];
     const darkGray: [number, number, number] = [55, 65, 81];
     const lightGray: [number, number, number] = [107, 114, 128];
-    const black: [number, number, number] = [17, 24, 39];
+    const lineGray: [number, number, number] = [200, 200, 200];
     const green: [number, number, number] = [22, 163, 74];
-    const orange: [number, number, number] = [234, 88, 12];
-    const lineColor: [number, number, number] = [156, 163, 175];
 
-    let y = margin;
-
-    const logoImg = new Image();
-    logoImg.src = '/hk.png';
+    const invoiceNumber = formatInvoiceNumber(invoice.id, invoice.invoiceDate, invoices);
 
     const renderPdf = () => {
-      // ── HEADER ──────────────────────────────────────────────────────
+      let y = margin;
+
+      // ── LOGO ──
+      const logoImg = new Image();
+      logoImg.src = '/hk.png';
       try {
-        doc.addImage(logoImg, 'PNG', margin, y, 52, 52);
+        doc.addImage(logoImg, 'PNG', margin, y, 50, 50);
       } catch {
-        doc.setDrawColor(44, 74, 107);
-        doc.setFillColor(44, 74, 107);
-        doc.circle(margin + 26, y + 26, 26, 'F');
+        // fallback circle
+        doc.setFillColor(26, 58, 92);
+        doc.circle(margin + 25, y + 25, 25, 'F');
         doc.setTextColor(255, 255, 255);
         doc.setFont('helvetica', 'bold');
-        doc.setFontSize(18);
-        doc.text('HK', margin + 26, y + 30, { align: 'center' });
+        doc.setFontSize(14);
+        doc.text('HK', margin + 25, y + 30, { align: 'center' });
       }
 
+      // ── HOTEL NAME ──
       doc.setTextColor(...black);
       doc.setFont('helvetica', 'bold');
-      doc.setFontSize(24);
-      doc.text('HOTEL KRISHNA', margin + 62, y + 20);
+      doc.setFontSize(20);
+      doc.text('HOTEL KRISHNA', margin + 60, y + 18);
 
       doc.setFont('helvetica', 'normal');
-      doc.setFontSize(9);
+      doc.setFontSize(8.5);
       doc.setTextColor(...lightGray);
-      doc.text('1st Floor Lalita Tower, Vadodara - 390005', margin + 62, y + 35);
-      doc.text('Phone: +91 9426786111 | info@hotelkrishna.com', margin + 62, y + 47);
+      doc.text('1st Floor Lalita Tower, Vadodara - 390005', margin + 60, y + 32);
+      doc.text('Phone: +91 9638003036 | krishnahotel138@gmail.com', margin + 60, y + 44);
 
+      // ── TAX INVOICE (right) ──
       doc.setFont('helvetica', 'bold');
-      doc.setFontSize(16);
+      doc.setFontSize(18);
       doc.setTextColor(...black);
       doc.text('TAX INVOICE', pageWidth - margin, y + 14, { align: 'right' });
 
       doc.setFont('helvetica', 'normal');
-      doc.setFontSize(9);
+      doc.setFontSize(8.5);
       doc.setTextColor(...darkGray);
-      doc.text(`Invoice #: ${formatInvoiceNumber(invoice.id, invoice.invoiceDate, invoices)}`, pageWidth - margin, y + 30, { align: 'right' });
-      doc.text(`Date: ${new Date(invoice.invoiceDate).toLocaleDateString('en-IN')}`, pageWidth - margin, y + 43, { align: 'right' });
+      doc.text(`Invoice #: ${invoiceNumber}`, pageWidth - margin, y + 30, { align: 'right' });
+      doc.text(`Date: ${new Date(invoice.invoiceDate).toLocaleDateString('en-IN')}`, pageWidth - margin, y + 42, { align: 'right' });
 
-      y += 65;
+      y += 62;
 
-      // Divider
-      doc.setDrawColor(...lineColor);
-      doc.setLineWidth(0.5);
+      // ── DIVIDER ──
+      doc.setDrawColor(...lineGray);
+      doc.setLineWidth(0.7);
       doc.line(margin, y, pageWidth - margin, y);
-      y += 22;
+      y += 20;
 
-      // ── BILL TO & STAY DETAILS ───────────────────────────────────────
-      const col2X = margin + contentWidth / 2 + 20;
+      // ── BILL TO / STAY DETAILS ──
+      const col2X = margin + contentWidth / 2 + 10;
 
       doc.setFont('helvetica', 'bold');
-      doc.setFontSize(8);
+      doc.setFontSize(7.5);
       doc.setTextColor(...lightGray);
       doc.text('BILL TO', margin, y);
       doc.text('STAY DETAILS', col2X, y);
       y += 14;
 
+      // Bill To
       doc.setFont('helvetica', 'bold');
       doc.setFontSize(10);
       doc.setTextColor(...black);
       doc.text(invoice.customerName, margin, y);
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(9);
+      doc.setTextColor(...darkGray);
+      let billY = y + 13;
+      if (invoice.customer2Name) {
+        doc.text(invoice.customer2Name, margin, billY);
+        billY += 13;
+      }
+      doc.text(invoice.customerEmail, margin, billY); billY += 13;
+      doc.text(invoice.customerPhone, margin, billY); billY += 13;
+      if (invoice.customerGstNumber && invoice.customerGstNumber.trim()) {
+        doc.text(`GSTIN: ${invoice.customerGstNumber}`, margin, billY); billY += 13;
+      }
 
-  doc.setFont('helvetica', 'normal');
-  y += 6;
-  doc.text(invoice.customerName, 20, y);
-  y += 5;
-  doc.text(invoice.customerEmail, 20, y);
-  y += 5;
-  doc.text(invoice.customerPhone, 20, y);
-  if (invoice.customerGstNumber) {
-    y += 5;
-    doc.text(`GSTIN: ${invoice.customerGstNumber}`, 20, y);
-  }
+      // Stay Details
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(9);
+      doc.setTextColor(...darkGray);
+      let stayY = y;
+      doc.text(`Room: ${invoice.roomNumber}`, col2X, stayY); stayY += 13;
+      doc.text(`Check-in: ${new Date(invoice.checkIn).toLocaleDateString('en-IN')}`, col2X, stayY); stayY += 13;
+      doc.text(`Check-out: ${new Date(invoice.checkOut).toLocaleDateString('en-IN')}`, col2X, stayY); stayY += 13;
+      doc.text(`Duration: ${invoice.days} Night${invoice.days > 1 ? 's' : ''}`, col2X, stayY);
 
-  // Stay Details
-  doc.setFont('helvetica', 'bold');
-  doc.text('STAY DETAILS', 120, y - 10);
+      y = Math.max(billY, stayY) + 16;
 
-  doc.setFont('helvetica', 'normal');
-  doc.text(`Room: ${invoice.roomNumber}`, 120, y - 4);
-  doc.text(
-    `Check-in: ${new Date(invoice.checkIn).toLocaleDateString('en-IN')}`,
-    120,
-    y + 1
-  );
-  doc.text(
-    `Check-out: ${new Date(invoice.checkOut).toLocaleDateString('en-IN')}`,
-    120,
-    y + 6
-  );
-
-  y += 15;
-  doc.line(20, y, 190, y);
-
-  // Charges
-  y += 10;
-  doc.setFont('helvetica', 'bold');
-  doc.text('Description', 20, y);
-  doc.text('Amount (Rs.)', 180, y, { align: 'right' });
-
-      y += 6;
-      doc.setDrawColor(...lineColor);
-      doc.setLineWidth(0.5);
+      // ── DIVIDER ──
+      doc.setDrawColor(...lineGray);
+      doc.setLineWidth(0.7);
       doc.line(margin, y, pageWidth - margin, y);
       y += 16;
 
-      // ── TABLE ROWS ────────────────────────────────────────────────────
-      // Order: Room Charges → Additional → GST → Advance Paid → Remaining Paid → [divider] → Total Amount
-      doc.setFont('helvetica', 'normal');
-      doc.setFontSize(10);
-      doc.setTextColor(...darkGray);
+      // ── TABLE HEADER ──
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(7.5);
+      doc.setTextColor(...lightGray);
+      doc.text('DESCRIPTION', margin, y);
+      doc.text('AMOUNT (Rs.)', pageWidth - margin, y, { align: 'right' });
+      y += 6;
+      doc.setDrawColor(...lineGray);
+      doc.setLineWidth(0.5);
+      doc.line(margin, y, pageWidth - margin, y);
+      y += 14;
+
+      // ── TABLE ROWS ──
+      const addRow = (
+        label: string,
+        amount: number,
+        colorRgb?: [number, number, number],
+        prefix = ''
+      ) => {
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(10);
+        doc.setTextColor(...(colorRgb || darkGray));
+        doc.text(label, margin, y);
+        doc.text(`${prefix}${currency(amount)}`, pageWidth - margin, y, { align: 'right' });
+        y += 20;
+      };
 
       // Room Charges
-      doc.text(`Room Charges (${invoice.days} night${invoice.days > 1 ? 's' : ''})`, margin, y);
-      doc.text(currency(invoice.roomCharges), pageWidth - margin, y, { align: 'right' });
-      y += 20;
+      addRow(`Room Charges (${invoice.days} night${invoice.days > 1 ? 's' : ''})`, invoice.roomCharges);
 
-  addRow('Room Charges', invoice.roomCharges);
-  if (invoice.additionalCharges > 0) {
-    addRow('Additional Charges', invoice.additionalCharges);
-  }
-  addRow('GST (5%)', invoice.cgst + invoice.sgst);
+      // Additional Charges
+      if (invoice.additionalCharges > 0) {
+        addRow('Additional Charges', invoice.additionalCharges);
+      }
 
-  y += 10;
-  doc.line(120, y, 190, y);
+      // GST (5%)
+      addRow('GST (5%)', invoice.cgst + invoice.sgst);
 
-  y += 8;
-  doc.setFont('helvetica', 'bold');
-  doc.text('TOTAL', 120, y);
-  doc.text(currency(invoice.total), 180, y, { align: 'right' });
+      // Advance Paid — green
+      if (invoice.advanceAmount != null && invoice.advanceAmount > 0) {
+        addRow(
+          `Advance Paid${invoice.advancePaymentMethod ? ` (${invoice.advancePaymentMethod})` : ''}`,
+          invoice.advanceAmount,
+          green,
+          '-'
+        );
+      }
 
-  if (invoice.advanceAmount > 0) {
-    y += 8;
-    doc.setFont('helvetica', 'normal');
-    doc.text('Advance Paid', 120, y);
-    doc.text('-' + currency(invoice.advanceAmount), 180, y, { align: 'right' });
+      // Remaining Paid — green
+      if (
+        invoice.paymentStatus === 'paid' &&
+        invoice.paymentMethod &&
+        invoice.advanceAmount != null &&
+        invoice.advanceAmount > 0
+      ) {
+        addRow(
+          `Remaining Paid (${invoice.paymentMethod})`,
+          invoice.total - invoice.advanceAmount,
+          green,
+          '-'
+        );
+      }
 
-    y += 8;
-    doc.setFont('helvetica', 'bold');
-    doc.text('DUE AMOUNT', 120, y);
-    doc.text(
-      currency(invoice.total - invoice.advanceAmount),
-      180,
-      y,
-      { align: 'right' }
-    );
-  }
+      // ── TOTAL ROW ──
+      doc.setDrawColor(...lineGray);
+      doc.setLineWidth(0.7);
+      doc.line(margin, y, pageWidth - margin, y);
+      y += 12;
 
-  // Payment Status
-  y += 15;
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(10);
-  const statusText = invoice.paymentStatus === 'paid' 
-    ? 'PAYMENT STATUS: PAID' 
-    : invoice.paymentStatus === 'partial'
-    ? 'PAYMENT STATUS: PARTIALLY PAID'
-    : 'PAYMENT STATUS: PENDING';
-  doc.text(statusText, 20, y);
-  
-  if (invoice.paymentMethod && invoice.paymentStatus === 'paid') {
-    doc.setFont('helvetica', 'normal');
-    doc.setFontSize(9);
-    y += 6;
-    doc.text('Payment Method: ' + invoice.paymentMethod, 20, y);
-  }
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(12);
+      doc.setTextColor(...black);
+      doc.text('Total Amount', margin, y);
+      doc.text(currency(invoice.total), pageWidth - margin, y, { align: 'right' });
+      y += 24;
 
-  y += 10;
-  doc.line(20, y, 190, y);
+      // ── PAYMENT INFO ──
+      doc.setDrawColor(...lineGray);
+      doc.setLineWidth(0.5);
+      doc.line(margin, y, pageWidth - margin, y);
+      y += 14;
 
-  y += 10;
-  doc.setFontSize(9);
-  doc.setFont('helvetica', 'normal');
-  doc.text('Thank you for staying with us.', 105, y, { align: 'center' });
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(9);
+      doc.setTextColor(...darkGray);
 
-      doc.save(`Invoice_${invoice.id}.pdf`);
+      if (invoice.advancePaymentMethod) {
+        doc.text(`Initial Payment Mode: ${invoice.advancePaymentMethod}`, margin, y);
+        y += 14;
+      }
+      if (invoice.paymentMethod) {
+        doc.text(`Final Payment Mode: ${invoice.paymentMethod}`, margin, y);
+        y += 14;
+      }
+
+      if (invoice.paymentStatus === 'paid') {
+        doc.setFont('helvetica', 'bold');
+        doc.setTextColor(...green);
+        doc.text(
+          `Fully Paid on ${new Date(invoice.invoiceDate).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}`,
+          margin, y
+        );
+        y += 16;
+      } else if (invoice.paymentStatus === 'partial') {
+        doc.setFont('helvetica', 'bold');
+        doc.setTextColor(234, 88, 12);
+        doc.text('Partially Paid', margin, y);
+        y += 16;
+      } else {
+        doc.setFont('helvetica', 'bold');
+        doc.setTextColor(220, 38, 38);
+        doc.text('Payment Pending', margin, y);
+        y += 16;
+      }
+
+      // ── FOOTER ──
+      const pageHeight = doc.internal.pageSize.getHeight();
+      doc.setDrawColor(...lineGray);
+      doc.setLineWidth(0.5);
+      doc.line(margin, pageHeight - 40, pageWidth - margin, pageHeight - 40);
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(8);
+      doc.setTextColor(...lightGray);
+      doc.text('Thank you for staying with Hotel Krishna.', pageWidth / 2, pageHeight - 26, { align: 'center' });
+
+      doc.save(`${invoiceNumber}.pdf`);
     };
 
+    // Trigger render (logo may already be cached)
+    const logoImg = new Image();
+    logoImg.src = '/hk.png';
     logoImg.onload = renderPdf;
     logoImg.onerror = renderPdf;
   };
 
-  // ── WHATSAPP SHARE ──────────────────────────────────────────────────
-  const invoiceNumber = formatInvoiceNumber(invoice.id, invoice.invoiceDate, invoices);
-  doc.save(`${invoiceNumber}.pdf`);
-};
+  // ── WHATSAPP SHARE ──
   const handleShareWhatsApp = (invoice: Invoice) => {
     try {
       const guestInfo = invoice.customer2Name
         ? `*Guests:* ${invoice.customerName} & ${invoice.customer2Name}\n`
         : `*Guest:* ${invoice.customerName}\n`;
-
       const gstInfo = invoice.customerGstNumber ? `GST No: ${invoice.customerGstNumber}\n` : '';
+      const invoiceNumber = formatInvoiceNumber(invoice.id, invoice.invoiceDate, invoices);
 
       const message =
         `*🏨 HOTEL KRISHNA - TAX INVOICE*\n\n` +
-        `Invoice No: ${invoice.id}\n` +
-        `Date: ${new Date(invoice.invoiceDate).toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric' })}\n\n` +
+        `Invoice No: ${invoiceNumber}\n` +
+        `Date: ${new Date(invoice.invoiceDate).toLocaleDateString('en-IN')}\n\n` +
         `━━━━━━━━━━━━━━━━━━━━\n` +
         `*GUEST INFORMATION*\n` +
         guestInfo +
@@ -659,15 +726,16 @@ export default function Billing() {
         `━━━━━━━━━━━━━━━━━━━━\n` +
         `*CHARGES BREAKDOWN*\n` +
         `Room Charges: Rs.${invoice.roomCharges.toLocaleString('en-IN', { minimumFractionDigits: 2 })}\n` +
-        `Additional: Rs.${invoice.additionalCharges.toLocaleString('en-IN', { minimumFractionDigits: 2 })}\n` +
-        `CGST (2.5%): Rs.${invoice.cgst.toLocaleString('en-IN', { minimumFractionDigits: 2 })}\n` +
-        `SGST (2.5%): Rs.${invoice.sgst.toLocaleString('en-IN', { minimumFractionDigits: 2 })}\n` +
-        (invoice.advanceAmount > 0 ? `Advance Paid${invoice.advancePaymentMethod ? ` (${invoice.advancePaymentMethod})` : ''}: -Rs.${invoice.advanceAmount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}\n` : '') +
-        (invoice.paymentStatus === 'paid' && invoice.paymentMethod && invoice.advanceAmount > 0
+        (invoice.additionalCharges > 0 ? `Additional: Rs.${invoice.additionalCharges.toLocaleString('en-IN', { minimumFractionDigits: 2 })}\n` : '') +
+        `GST (5%): Rs.${(invoice.cgst + invoice.sgst).toLocaleString('en-IN', { minimumFractionDigits: 2 })}\n` +
+        (invoice.advanceAmount != null && invoice.advanceAmount > 0
+          ? `Advance Paid${invoice.advancePaymentMethod ? ` (${invoice.advancePaymentMethod})` : ''}: -Rs.${invoice.advanceAmount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}\n`
+          : '') +
+        (invoice.paymentStatus === 'paid' && invoice.paymentMethod && invoice.advanceAmount != null && invoice.advanceAmount > 0
           ? `Remaining Paid (${invoice.paymentMethod}): -Rs.${(invoice.total - invoice.advanceAmount).toLocaleString('en-IN', { minimumFractionDigits: 2 })}\n`
           : '') +
         `\n*TOTAL AMOUNT: Rs.${invoice.total.toLocaleString('en-IN', { minimumFractionDigits: 2 })}*\n` +
-        `Payment Status: ${invoice.paymentStatus.toUpperCase()}${invoice.paymentStatus === 'paid' && invoice.paymentMethod ? ` via ${invoice.paymentMethod}` : invoice.paymentStatus === 'partial' && invoice.advancePaymentMethod ? ` (Advance via ${invoice.advancePaymentMethod})` : ''}\n\n` +
+        `Payment Status: ${invoice.paymentStatus.toUpperCase()}\n\n` +
         `Thank you for choosing Hotel Krishna! 🙏`;
 
       let phoneNumber = invoice.customerPhone.replace(/\D/g, '');
@@ -677,23 +745,16 @@ export default function Billing() {
       window.open(whatsappUrl, '_blank');
       toast({ title: 'Success', description: 'Opening WhatsApp to share invoice' });
     } catch (error) {
-      console.error('WhatsApp share error:', error);
       toast({ title: 'Error', description: 'Failed to share via WhatsApp', variant: 'destructive' });
     }
-  };
-
-  const handleMarkAsPaid = (invoice: Invoice) => {
-    setPaymentInvoice(invoice);
   };
 
   if (isLoading) {
     return (
       <DashboardLayout>
-        <div className="space-y-6 animate-fade-in">
-          <div className="text-center py-12">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto"></div>
-            <p className="mt-4 text-muted-foreground">Loading invoices...</p>
-          </div>
+        <div className="text-center py-12">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto"></div>
+          <p className="mt-4 text-muted-foreground">Loading invoices...</p>
         </div>
       </DashboardLayout>
     );
@@ -715,7 +776,7 @@ export default function Billing() {
           </div>
         </div>
 
-        {/* Compact Date Filter Bar */}
+        {/* Date Filter Bar */}
         <Card className="bg-[#2c4a6b] border-0 shadow-lg">
           <CardContent className="p-4">
             <div className="flex items-center justify-between gap-4 flex-wrap">
@@ -807,12 +868,11 @@ export default function Billing() {
                 <Receipt className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
                 <h3 className="text-lg font-medium mb-2">No invoices found</h3>
                 <p className="text-muted-foreground mb-4">
-                  {searchQuery 
+                  {searchQuery
                     ? `No invoices match "${searchQuery}"`
-                    : isCustomer 
+                    : isCustomer
                       ? "You don't have any invoices yet."
-                      : "No invoices match the current filter."
-                  }
+                      : "No invoices match the current filter."}
                 </p>
               </CardContent>
             </Card>
@@ -836,14 +896,12 @@ export default function Billing() {
                           </div>
                         </div>
                       </div>
-                      <div className="flex items-center gap-2">
-                        <Badge className={getPaymentStatusColor(invoice.paymentStatus)}>
-                          <div className="flex items-center gap-1">
-                            {getPaymentStatusIcon(invoice.paymentStatus)}
-                            {invoice.paymentStatus.charAt(0).toUpperCase() + invoice.paymentStatus.slice(1)}
-                          </div>
-                        </Badge>
-                      </div>
+                      <Badge className={getPaymentStatusColor(invoice.paymentStatus)}>
+                        <div className="flex items-center gap-1">
+                          {getPaymentStatusIcon(invoice.paymentStatus)}
+                          {invoice.paymentStatus.charAt(0).toUpperCase() + invoice.paymentStatus.slice(1)}
+                        </div>
+                      </Badge>
                     </div>
                   </CardHeader>
 
@@ -891,25 +949,23 @@ export default function Billing() {
                               <span className="text-gray-700">Room Charges ({invoice.days} night{invoice.days > 1 ? 's' : ''}):</span>
                               <span className="font-medium text-gray-900">₹{invoice.roomCharges.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
                             </div>
+                            {invoice.additionalCharges > 0 && (
+                              <div className="flex justify-between">
+                                <span className="text-gray-700">Additional Charges:</span>
+                                <span className="font-medium text-gray-900">₹{invoice.additionalCharges.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+                              </div>
+                            )}
                             <div className="flex justify-between">
-                              <span className="text-gray-700">Additional Charges:</span>
-                              <span className="font-medium text-gray-900">₹{invoice.additionalCharges.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+                              <span className="text-gray-700">GST (5%):</span>
+                              <span className="font-medium text-gray-900">₹{(invoice.cgst + invoice.sgst).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
                             </div>
-                            <div className="flex justify-between text-xs">
-                              <span className="text-gray-600">CGST (2.5%):</span>
-                              <span className="text-gray-800">₹{invoice.cgst.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
-                            </div>
-                            <div className="flex justify-between text-xs">
-                              <span className="text-gray-600">SGST (2.5%):</span>
-                              <span className="text-gray-800">₹{invoice.sgst.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
-                            </div>
-                            {invoice.advanceAmount > 0 && (
+                            {invoice.advanceAmount != null && invoice.advanceAmount > 0 && (
                               <div className="flex justify-between">
                                 <span className="text-gray-700">Advance Paid{invoice.advancePaymentMethod ? ` (${invoice.advancePaymentMethod})` : ''}:</span>
                                 <span className="font-medium text-green-600">-₹{invoice.advanceAmount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
                               </div>
                             )}
-                            {invoice.paymentStatus === 'paid' && invoice.paymentMethod && invoice.advanceAmount > 0 && (
+                            {invoice.paymentStatus === 'paid' && invoice.paymentMethod && invoice.advanceAmount != null && invoice.advanceAmount > 0 && (
                               <div className="flex justify-between">
                                 <span className="text-gray-700">Remaining Paid ({invoice.paymentMethod}):</span>
                                 <span className="font-medium text-green-600">-₹{(invoice.total - invoice.advanceAmount).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
@@ -958,7 +1014,7 @@ export default function Billing() {
                         <MessageCircle className="h-4 w-4 mr-1" />Share
                       </Button>
                       {invoice.paymentStatus === 'pending' && !isCustomer && (
-                        <Button size="sm" className="bg-green-600 hover:bg-green-700" onClick={() => handleMarkAsPaid(invoice)}>
+                        <Button size="sm" className="bg-green-600 hover:bg-green-700" onClick={() => setPaymentInvoice(invoice)}>
                           <CreditCard className="h-4 w-4 mr-1" />Mark as Paid
                         </Button>
                       )}

@@ -241,18 +241,7 @@ export default function Reports() {
         ) : (
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             {/* Total Revenue */}
-            <Card>
-              <CardContent className="p-5">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Total Revenue</p>
-                    <p className="text-2xl font-bold text-green-600 mt-1">₹{totalIncome.toLocaleString()}</p>
-                    <p className="text-xs text-muted-foreground mt-1">{incomeEntries.length} transactions</p>
-                  </div>
-                  <TrendingUp className="h-7 w-7 text-green-500"/>
-                </div>
-              </CardContent>
-            </Card>
+            
 
             {/* GPay */}
             <Card className="border-t-4 border-t-emerald-400">
@@ -288,6 +277,19 @@ export default function Reports() {
                     </p>
                   </div>
                   <Banknote className="h-7 w-7 text-orange-500"/>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardContent className="p-5">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Total Revenue</p>
+                    <p className="text-2xl font-bold text-green-600 mt-1">₹{totalIncome.toLocaleString()}</p>
+                    <p className="text-xs text-muted-foreground mt-1">{incomeEntries.length} transactions</p>
+                  </div>
+                  <TrendingUp className="h-7 w-7 text-green-500"/>
                 </div>
               </CardContent>
             </Card>

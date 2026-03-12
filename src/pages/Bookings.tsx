@@ -10,9 +10,9 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Calendar } from '@/components/ui/calendar';
 import { TimePicker } from '@/components/ui/time-picker';
-import { CalendarCheck, Users, Phone, Mail, Plus, Eye, Edit, LogIn, LogOut, CalendarIcon, Search, ArrowRightLeft } from 'lucide-react';
+import { CalendarCheck, Users, Phone, Mail, Plus, Eye, Edit, LogIn, LogOut, CalendarIcon, Search, ArrowRightLeft, CreditCard } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
-import { bookingsApi, roomsApi } from '@/services/api';
+import { bookingsApi, roomsApi, invoicesApi } from '@/services/api';
 import { useToast } from '@/hooks/use-toast';
 import { format } from 'date-fns';
 
@@ -71,6 +71,10 @@ interface Booking {
   advancePaymentMethod?: string;
   specialRequests?: string;
   createdAt?: string;
+  // Payment status fields
+  paymentStatus?: string;
+  totalPaid?: number;
+  balanceDue?: number;
 }
 
 interface Room {
@@ -1354,6 +1358,165 @@ function ShiftRoomModal({ booking, isOpen, onClose }: ShiftRoomModalProps) {
   );
 }
 
+// ─── Payment Modal ─────────────────────────────────────────────────────────
+
+interface PaymentModalProps {
+  booking: Booking | null;
+  isOpen: boolean;
+  onClose: () => void;
+}
+
+function PaymentModal({ booking, isOpen, onClose }: PaymentModalProps) {
+  const [paymentAmount, setPaymentAmount] = useState<number>(0);
+  const [paymentMethod, setPaymentMethod] = useState<string>('cash');
+  const [isLoading, setIsLoading] = useState(false);
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+
+  useEffect(() => {
+    if (booking && isOpen) {
+      setPaymentAmount(booking.balanceDue || 0);
+      setPaymentMethod('cash');
+    }
+  }, [booking, isOpen]);
+
+  const handlePayment = async () => {
+    if (!booking || paymentAmount <= 0) return;
+
+    setIsLoading(true);
+    try {
+      // Find the invoice for this booking
+      const invoices = await invoicesApi.getAll('', { customerEmail: booking.customerEmail });
+      const invoice = invoices.find(inv => inv.bookingId === booking.id);
+      
+      if (!invoice) {
+        throw new Error('Invoice not found for this booking');
+      }
+
+      // Update the invoice with payment
+      await invoicesApi.update(invoice.id, {
+        paymentAmount: paymentAmount,
+        paymentMethod: paymentMethod,
+      });
+
+      // Refresh data
+      queryClient.invalidateQueries({ queryKey: ['bookings'] });
+      queryClient.invalidateQueries({ queryKey: ['invoices'] });
+
+      toast({
+        title: 'Payment Recorded',
+        description: `Payment of ₹${paymentAmount.toLocaleString()} recorded successfully`,
+      });
+
+      onClose();
+    } catch (error: any) {
+      toast({
+        title: 'Error',
+        description: error.message || 'Failed to record payment',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  if (!booking) return null;
+
+  return (
+    <Dialog open={isOpen} onOpenChange={onClose}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>Record Payment - {booking.customerName}</DialogTitle>
+        </DialogHeader>
+        
+        <div className="space-y-4">
+          <div className="bg-blue-50 p-4 rounded-lg">
+            <h4 className="font-medium text-blue-900 mb-2">Payment Summary</h4>
+            <div className="space-y-1 text-sm text-blue-800">
+              <div className="flex justify-between">
+                <span>Total Amount:</span>
+                <span>₹{booking.totalAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+              </div>
+              <div className="flex justify-between">
+                <span>Already Paid:</span>
+                <span>₹{(booking.totalPaid || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+              </div>
+              <div className="flex justify-between font-bold border-t pt-1">
+                <span>Balance Due:</span>
+                <span>₹{(booking.balanceDue || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+              </div>
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="paymentAmount">Payment Amount (₹)</Label>
+            <Input
+              id="paymentAmount"
+              type="number"
+              min="0"
+              max={booking.balanceDue || 0}
+              step="0.01"
+              value={paymentAmount || ''}
+              onChange={(e) => setPaymentAmount(parseFloat(e.target.value) || 0)}
+              placeholder="Enter payment amount"
+              required
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label>Payment Method</Label>
+            <div className="flex gap-4">
+              <label className="flex items-center space-x-2">
+                <input
+                  type="radio"
+                  name="paymentMethod"
+                  value="cash"
+                  checked={paymentMethod === 'cash'}
+                  onChange={(e) => setPaymentMethod(e.target.value)}
+                />
+                <span>Cash</span>
+              </label>
+              <label className="flex items-center space-x-2">
+                <input
+                  type="radio"
+                  name="paymentMethod"
+                  value="gpay"
+                  checked={paymentMethod === 'gpay'}
+                  onChange={(e) => setPaymentMethod(e.target.value)}
+                />
+                <span>GPay</span>
+              </label>
+              <label className="flex items-center space-x-2">
+                <input
+                  type="radio"
+                  name="paymentMethod"
+                  value="mim"
+                  checked={paymentMethod === 'mim'}
+                  onChange={(e) => setPaymentMethod(e.target.value)}
+                />
+                <span>MIM</span>
+              </label>
+            </div>
+          </div>
+
+          <div className="flex gap-2 pt-4">
+            <Button
+              onClick={handlePayment}
+              disabled={isLoading || paymentAmount <= 0}
+              className="flex-1"
+            >
+              {isLoading ? 'Recording...' : 'Record Payment'}
+            </Button>
+            <Button variant="outline" onClick={onClose} disabled={isLoading}>
+              Cancel
+            </Button>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 // ─── Status helpers ───────────────────────────────────────────────────────────
 
 const getStatusColor = (status: string) => {
@@ -1374,6 +1537,7 @@ export default function Bookings() {
   const [viewingBooking, setViewingBooking] = useState<Booking | null>(null);
   const [editingBooking, setEditingBooking] = useState<Booking | null>(null);
   const [shiftingBooking, setShiftingBooking] = useState<Booking | null>(null);
+  const [paymentBooking, setPaymentBooking] = useState<Booking | null>(null);
   const [filter, setFilter] = useState<string>('');
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
   const [showAllBookings, setShowAllBookings] = useState(false);
@@ -1594,9 +1758,32 @@ export default function Bookings() {
                       </div>
                     </div>
                     <div className="space-y-2">
-                      <h4 className="font-medium text-sm">Total Amount</h4>
-                      <div className="text-lg font-bold text-primary">
-                        ₹{booking.totalAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      <h4 className="font-medium text-sm">Payment Status</h4>
+                      <div className="space-y-1">
+                        <div className="text-lg font-bold text-primary">
+                          ₹{booking.totalAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </div>
+                        {booking.paymentStatus && (
+                          <div className="text-xs">
+                            {booking.paymentStatus === 'paid' && (
+                              <span className="text-green-600 font-medium">✓ Fully Paid</span>
+                            )}
+                            {booking.paymentStatus === 'partial' && (
+                              <div className="space-y-1">
+                                <span className="text-orange-600 font-medium">⚠ Partial Payment</span>
+                                <div className="text-xs text-muted-foreground">
+                                  Paid: ₹{(booking.totalPaid || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                                </div>
+                                <div className="text-xs text-orange-600 font-medium">
+                                  Due: ₹{(booking.balanceDue || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                                </div>
+                              </div>
+                            )}
+                            {booking.paymentStatus === 'pending' && (
+                              <span className="text-red-600 font-medium">⏳ Payment Pending</span>
+                            )}
+                          </div>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -1624,6 +1811,11 @@ export default function Bookings() {
                         <LogOut className="h-4 w-4 mr-1" />Check Out
                       </Button>
                     )}
+                    {(booking.paymentStatus === 'pending' || booking.paymentStatus === 'partial') && booking.balanceDue && booking.balanceDue > 0 && !isCustomer && (
+                      <Button size="sm" className="bg-orange-600 hover:bg-orange-700" onClick={() => setPaymentBooking(booking)}>
+                        <CreditCard className="h-4 w-4 mr-1" />Mark as Paid
+                      </Button>
+                    )}
                   </div>
                 </CardContent>
               </Card>
@@ -1636,6 +1828,7 @@ export default function Bookings() {
         <ViewBookingModal booking={viewingBooking} isOpen={!!viewingBooking} onClose={() => setViewingBooking(null)} />
         <EditBookingModal booking={editingBooking} isOpen={!!editingBooking} onClose={() => setEditingBooking(null)} />
         <ShiftRoomModal booking={shiftingBooking} isOpen={!!shiftingBooking} onClose={() => setShiftingBooking(null)} />
+        <PaymentModal booking={paymentBooking} isOpen={!!paymentBooking} onClose={() => setPaymentBooking(null)} />
       </div>
     </DashboardLayout>
   );

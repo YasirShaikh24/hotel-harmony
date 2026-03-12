@@ -1,12 +1,13 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { Input } from '@/components/ui/input';
 import {
   TrendingUp, TrendingDown, IndianRupee, Calendar,
-  Smartphone, Banknote, Receipt, Wallet, CreditCard
+  Smartphone, Banknote, Receipt, Wallet, CreditCard, Search
 } from 'lucide-react';
 import { invoicesApi, expensesApi } from '@/services/api';
 import {
@@ -30,6 +31,8 @@ interface Invoice {
   checkIn?: string;
   paymentStatus: string;
   createdAt?: string;
+  latestPaymentDate?: string; // Add this for sorting by latest payment
+  payments?: any[]; // Include payment details
 }
 
 interface Expense {
@@ -81,11 +84,28 @@ const methodStyle = (method: string) => ({
 export default function Reports() {
   const [timePeriod, setTimePeriod] = useState<TimePeriod>('monthly');
   const [activeTab, setActiveTab]   = useState<ActiveTab>('overview');
+  const [customerSearch, setCustomerSearch] = useState<string>(''); // Add customer search state
+  const searchInputRef = useRef<HTMLInputElement>(null);
+
+  // Keyboard shortcut for search (Ctrl/Cmd + K)
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+        e.preventDefault();
+        searchInputRef.current?.focus();
+      }
+    };
+
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, []);
 
   // Fetch ALL invoices regardless of status so advances on pending/partial are included
   const { data: allInvoices = [], isLoading: invoicesLoading } = useQuery({
     queryKey: ['invoices', 'all'],
     queryFn:  () => invoicesApi.getAll(''),
+    staleTime: 10000, // Cache for 10 seconds
+    refetchOnWindowFocus: true,
   });
 
   const { data: allExpenses = [], isLoading: expensesLoading } = useQuery({
@@ -107,24 +127,49 @@ export default function Reports() {
 
   // ── Build flat IncomeEntry list with advance payments and invoice totals ────────────────────────────────────
   //
-  // Simplified Rules:
-  //  • Advance payment → own entry, uses advancePaymentMethod + checkIn date
-  //  • Total paid amount → calculated from invoice.totalPaid field
+  // Enhanced Rules:
+  //  • Use actual payment timestamps from payments table for accurate sorting
+  //  • Advance payment → own entry, uses advancePaymentMethod + actual payment date
+  //  • Regular payments → use actual payment dates from payments table
   //  • Show both advance and remaining amounts separately
+  //  • Sort by LATEST PAYMENT DATE first (most recent payments at top)
   //
   // The period filter is applied on the DATE of each individual payment so
   // "Today" shows only money that physically arrived today.
 
   const incomeEntries: IncomeEntry[] = [];
 
+  // Debug logging
+  console.log('All invoices received:', allInvoices.length);
+  if (allInvoices.length > 0) {
+    console.log('Sample invoice:', allInvoices[0]);
+  }
+
   (allInvoices as Invoice[]).forEach((inv) => {
     const advance = inv.advanceAmount ?? 0;
     const totalPaid = inv.totalPaid ?? 0;
     const hasAdvance = advance > 0;
+    const payments = inv.payments || [];
 
-    // Date the advance was collected: prefer checkIn, else createdAt, else invoiceDate
-    const advanceDate = inv.checkIn || inv.createdAt || inv.invoiceDate;
-    const finalDate = inv.invoiceDate;
+    // Debug logging for payment data
+    if (payments.length > 0) {
+      console.log(`Invoice ${inv.id} has ${payments.length} payments:`, payments);
+    }
+
+    // Sort payments by date (most recent first) to get latest payment timestamp
+    const sortedPayments = payments.sort((a: any, b: any) => 
+      new Date(b.paymentDate || b.payment_date).getTime() - new Date(a.paymentDate || a.payment_date).getTime()
+    );
+
+    // Use the latest payment date for this invoice, or fallback to invoice date
+    const latestPaymentTimestamp = inv.latestPaymentDate || 
+                                   (sortedPayments.length > 0 ? (sortedPayments[0].paymentDate || sortedPayments[0].payment_date) : null) ||
+                                   inv.invoiceDate;
+
+    // Date the advance was collected: prefer actual payment date, then checkIn, else createdAt, else invoiceDate
+    const advanceDate = (payments.find((p: any) => p.notes?.includes('Advance'))?.paymentDate || 
+                        payments.find((p: any) => p.notes?.includes('Advance'))?.payment_date) ||
+                        inv.checkIn || inv.createdAt || inv.invoiceDate;
 
     // Add advance payment entry if exists
     if (hasAdvance && inPeriod(advanceDate)) {
@@ -138,34 +183,56 @@ export default function Reports() {
         isAdvance: true,
         invoiceId: inv.id,
         paymentType: 'advance',
+        paymentId: payments.find((p: any) => p.notes?.includes('Advance'))?.id,
       });
     }
 
-    // Add remaining payment if invoice has been paid beyond advance
-    const remainingPaid = totalPaid - advance;
-    if (remainingPaid > 0 && inPeriod(finalDate)) {
+    // Add individual payment entries from payments table
+    payments.forEach((payment: any) => {
+      const paymentDate = payment.paymentDate || payment.payment_date;
+      const paymentMethod = payment.paymentMethod || payment.payment_method;
+      
+      if (inPeriod(paymentDate) && !payment.notes?.includes('Advance')) {
+        incomeEntries.push({
+          id: `${inv.id}-payment-${payment.id}`,
+          roomNumber: inv.roomNumber,
+          customerName: inv.customerName,
+          amount: parseFloat(payment.amount.toString()),
+          paymentMethod: normaliseMethod(paymentMethod),
+          date: paymentDate,
+          isAdvance: false,
+          invoiceId: inv.id,
+          paymentType: 'partial', // Will be updated based on total
+          paymentId: payment.id,
+        });
+      }
+    });
+
+    // If no individual payments but has totalPaid (legacy data), create entry
+    if (payments.length === 0 && totalPaid > advance && inPeriod(latestPaymentTimestamp)) {
+      const remainingPaid = totalPaid - advance;
       incomeEntries.push({
         id: `${inv.id}-remaining`,
         roomNumber: inv.roomNumber,
         customerName: inv.customerName,
         amount: remainingPaid,
         paymentMethod: normaliseMethod(inv.paymentMethod || 'Cash'),
-        date: finalDate,
+        date: latestPaymentTimestamp,
         isAdvance: false,
         invoiceId: inv.id,
         paymentType: remainingPaid >= (inv.total - advance) ? 'final' : 'partial',
       });
     }
 
-    // For invoices without advance but with payments
-    if (!hasAdvance && totalPaid > 0 && inPeriod(finalDate)) {
+    // For invoices without advance but with payments (legacy)
+    if (!hasAdvance && totalPaid > 0 && payments.length === 0 && inPeriod(latestPaymentTimestamp)) {
       incomeEntries.push({
         id: `${inv.id}-full`,
         roomNumber: inv.roomNumber,
         customerName: inv.customerName,
         amount: totalPaid,
         paymentMethod: normaliseMethod(inv.paymentMethod || 'Cash'),
-        date: finalDate,
+        date: latestPaymentTimestamp,
         isAdvance: false,
         invoiceId: inv.id,
         paymentType: totalPaid >= inv.total ? 'full' : 'partial',
@@ -173,17 +240,51 @@ export default function Reports() {
     }
   });
 
+  // Update payment types based on invoice totals
+  incomeEntries.forEach(entry => {
+    if (!entry.isAdvance) {
+      const invoice = (allInvoices as Invoice[]).find(inv => inv.id === entry.invoiceId);
+      if (invoice) {
+        const totalPaymentsForInvoice = incomeEntries
+          .filter(e => e.invoiceId === entry.invoiceId)
+          .reduce((sum, e) => sum + e.amount, 0);
+        
+        if (totalPaymentsForInvoice >= invoice.total) {
+          // Find the last payment and mark it as final
+          const invoiceEntries = incomeEntries.filter(e => e.invoiceId === entry.invoiceId && !e.isAdvance);
+          const lastPayment = invoiceEntries.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())[0];
+          if (lastPayment && lastPayment.id === entry.id) {
+            entry.paymentType = 'final';
+          }
+        }
+      }
+    }
+  });
+
   // ── filtered expenses ──────────────────────────────────────────────
   const filteredExpenses: Expense[] = (allExpenses as Expense[]).filter(e => inPeriod(e.date));
 
-  // ── aggregates ────────────────────────────────────────────────────
-  const sumByMethod = (m: string) =>
-    incomeEntries.filter(e => e.paymentMethod === m).reduce((s, e) => s + e.amount, 0);
+  // ── Apply customer search filter (optimized with useMemo) ──────────────────────────────────
+  const filteredIncomeEntries = useMemo(() => {
+    if (!customerSearch.trim()) return incomeEntries;
+    const searchTerm = customerSearch.toLowerCase().trim();
+    return incomeEntries.filter(entry => 
+      entry.customerName.toLowerCase().includes(searchTerm)
+    );
+  }, [incomeEntries, customerSearch]);
 
-  const gpayIncome  = sumByMethod('GPay');
-  const cashIncome  = sumByMethod('Cash');
-  const mimIncome   = sumByMethod('MIM');
-  const totalIncome = incomeEntries.reduce((s, e) => s + e.amount, 0);
+  // ── aggregates (optimized with useMemo for search performance) ────────────────────────────────────────────────────
+  const { gpayIncome, cashIncome, mimIncome, totalIncome } = useMemo(() => {
+    const sumByMethod = (m: string) =>
+      filteredIncomeEntries.filter(e => e.paymentMethod === m).reduce((s, e) => s + e.amount, 0);
+
+    return {
+      gpayIncome: sumByMethod('GPay'),
+      cashIncome: sumByMethod('Cash'),
+      mimIncome: sumByMethod('MIM'),
+      totalIncome: filteredIncomeEntries.reduce((s, e) => s + e.amount, 0)
+    };
+  }, [filteredIncomeEntries]);
   const totalExpenses = filteredExpenses.reduce((s, e) => s + e.amount, 0);
   const netProfit   = totalIncome - totalExpenses;
 
@@ -222,6 +323,11 @@ export default function Reports() {
           <h1 className="text-2xl lg:text-3xl font-bold text-foreground">Financial Reports</h1>
           <p className="text-muted-foreground mt-1">
             Complete financial overview — {periodLabel[timePeriod]}
+            {customerSearch && (
+              <span className="ml-2 text-blue-600 font-medium">
+                • Showing results for "{customerSearch}"
+              </span>
+            )}
           </p>
         </div>
 
@@ -232,6 +338,32 @@ export default function Reports() {
               {label}
             </Button>
           ))}
+        </div>
+
+        {/* Customer Search */}
+        <div className="flex items-center gap-4">
+          <div className="flex-1 max-w-md">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                placeholder="Search by customer name... "
+                value={customerSearch}
+                onChange={(e) => setCustomerSearch(e.target.value)}
+                className="pl-10"
+                ref={searchInputRef}
+              />
+            </div>
+          </div>
+          {customerSearch && (
+            <Button 
+              variant="outline" 
+              size="sm" 
+              onClick={() => setCustomerSearch('')}
+              className="text-muted-foreground hover:text-foreground"
+            >
+              Clear Search
+            </Button>
+          )}
         </div>
 
         {/* ── Summary cards ── */}
@@ -256,10 +388,11 @@ export default function Reports() {
                     <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">GPay/UPI Income</p>
                     <p className="text-2xl font-bold text-emerald-600 mt-1">₹{gpayIncome.toLocaleString()}</p>
                     <p className="text-xs text-muted-foreground mt-1">
-                      {incomeEntries.filter(e => e.paymentMethod === 'GPay').length} txns
-                      {incomeEntries.filter(e => e.paymentMethod === 'GPay' && e.isAdvance).length > 0 &&
-                        ` · ${incomeEntries.filter(e => e.paymentMethod === 'GPay' && e.isAdvance).length} advance`
+                      {filteredIncomeEntries.filter(e => e.paymentMethod === 'GPay').length} txns
+                      {filteredIncomeEntries.filter(e => e.paymentMethod === 'GPay' && e.isAdvance).length > 0 &&
+                        ` · ${filteredIncomeEntries.filter(e => e.paymentMethod === 'GPay' && e.isAdvance).length} advance`
                       }
+                      {customerSearch && ` · filtered`}
                     </p>
                   </div>
                   <Smartphone className="h-7 w-7 text-emerald-500"/>
@@ -275,10 +408,11 @@ export default function Reports() {
                     <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Cash Income</p>
                     <p className="text-2xl font-bold text-orange-600 mt-1">₹{cashIncome.toLocaleString()}</p>
                     <p className="text-xs text-muted-foreground mt-1">
-                      {incomeEntries.filter(e => e.paymentMethod === 'Cash').length} txns
-                      {incomeEntries.filter(e => e.paymentMethod === 'Cash' && e.isAdvance).length > 0 &&
-                        ` · ${incomeEntries.filter(e => e.paymentMethod === 'Cash' && e.isAdvance).length} advance`
+                      {filteredIncomeEntries.filter(e => e.paymentMethod === 'Cash').length} txns
+                      {filteredIncomeEntries.filter(e => e.paymentMethod === 'Cash' && e.isAdvance).length > 0 &&
+                        ` · ${filteredIncomeEntries.filter(e => e.paymentMethod === 'Cash' && e.isAdvance).length} advance`
                       }
+                      {customerSearch && ` · filtered`}
                     </p>
                   </div>
                   <Banknote className="h-7 w-7 text-orange-500"/>
@@ -294,10 +428,11 @@ export default function Reports() {
                     <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">MIM Income</p>
                     <p className="text-2xl font-bold text-blue-600 mt-1">₹{mimIncome.toLocaleString()}</p>
                     <p className="text-xs text-muted-foreground mt-1">
-                      {incomeEntries.filter(e => e.paymentMethod === 'MIM').length} txns
-                      {incomeEntries.filter(e => e.paymentMethod === 'MIM' && e.isAdvance).length > 0 &&
-                        ` · ${incomeEntries.filter(e => e.paymentMethod === 'MIM' && e.isAdvance).length} advance`
+                      {filteredIncomeEntries.filter(e => e.paymentMethod === 'MIM').length} txns
+                      {filteredIncomeEntries.filter(e => e.paymentMethod === 'MIM' && e.isAdvance).length > 0 &&
+                        ` · ${filteredIncomeEntries.filter(e => e.paymentMethod === 'MIM' && e.isAdvance).length} advance`
                       }
+                      {customerSearch && ` · filtered`}
                     </p>
                   </div>
                   <CreditCard className="h-7 w-7 text-blue-500"/>
@@ -312,10 +447,11 @@ export default function Reports() {
                     <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Total Revenue</p>
                     <p className="text-2xl font-bold text-green-600 mt-1">₹{totalIncome.toLocaleString()}</p>
                     <p className="text-xs text-muted-foreground mt-1">
-                      {incomeEntries.length} transactions
-                      {incomeEntries.filter(e => e.isAdvance).length > 0 &&
-                        ` · ${incomeEntries.filter(e => e.isAdvance).length} advances`
+                      {filteredIncomeEntries.length} transactions
+                      {filteredIncomeEntries.filter(e => e.isAdvance).length > 0 &&
+                        ` · ${filteredIncomeEntries.filter(e => e.isAdvance).length} advances`
                       }
+                      {customerSearch && ` · filtered`}
                     </p>
                   </div>
                   <TrendingUp className="h-7 w-7 text-green-500"/>
@@ -333,13 +469,13 @@ export default function Reports() {
                       <div className="flex justify-between text-sm">
                         <span>Advances:</span>
                         <span className="font-medium text-blue-600">
-                          ₹{incomeEntries.filter(e => e.isAdvance).reduce((s, e) => s + e.amount, 0).toLocaleString()}
+                          ₹{filteredIncomeEntries.filter(e => e.isAdvance).reduce((s, e) => s + e.amount, 0).toLocaleString()}
                         </span>
                       </div>
                       <div className="flex justify-between text-sm">
                         <span>Payments:</span>
                         <span className="font-medium text-green-600">
-                          ₹{incomeEntries.filter(e => !e.isAdvance).reduce((s, e) => s + e.amount, 0).toLocaleString()}
+                          ₹{filteredIncomeEntries.filter(e => !e.isAdvance).reduce((s, e) => s + e.amount, 0).toLocaleString()}
                         </span>
                       </div>
                     </div>
@@ -457,18 +593,18 @@ export default function Reports() {
                 <CardContent>
                   <p className="text-3xl font-bold text-green-600">₹{gpayIncome.toLocaleString()}</p>
                   <div className="mt-2 flex gap-4 text-xs text-muted-foreground">
-                    <span>{incomeEntries.filter(e => e.paymentMethod === 'GPay').length} total transactions</span>
+                    <span>{filteredIncomeEntries.filter(e => e.paymentMethod === 'GPay').length} total transactions</span>
                     <span>·</span>
                     <span className="text-blue-600 font-medium">
-                      {incomeEntries.filter(e => e.paymentMethod === 'GPay' && e.isAdvance).length} advance
+                      {filteredIncomeEntries.filter(e => e.paymentMethod === 'GPay' && e.isAdvance).length} advance
                     </span>
                     <span>·</span>
                     <span className="text-green-600 font-medium">
-                      {incomeEntries.filter(e => e.paymentMethod === 'GPay' && e.paymentType === 'full').length} full
+                      {filteredIncomeEntries.filter(e => e.paymentMethod === 'GPay' && e.paymentType === 'full').length} full
                     </span>
                     <span>·</span>
                     <span className="text-yellow-600 font-medium">
-                      {incomeEntries.filter(e => e.paymentMethod === 'GPay' && e.paymentType === 'partial').length} partial
+                      {filteredIncomeEntries.filter(e => e.paymentMethod === 'GPay' && e.paymentType === 'partial').length} partial
                     </span>
                   </div>
                 </CardContent>
@@ -483,18 +619,18 @@ export default function Reports() {
                 <CardContent>
                   <p className="text-3xl font-bold text-orange-600">₹{cashIncome.toLocaleString()}</p>
                   <div className="mt-2 flex gap-4 text-xs text-muted-foreground">
-                    <span>{incomeEntries.filter(e => e.paymentMethod === 'Cash').length} total transactions</span>
+                    <span>{filteredIncomeEntries.filter(e => e.paymentMethod === 'Cash').length} total transactions</span>
                     <span>·</span>
                     <span className="text-blue-600 font-medium">
-                      {incomeEntries.filter(e => e.paymentMethod === 'Cash' && e.isAdvance).length} advance
+                      {filteredIncomeEntries.filter(e => e.paymentMethod === 'Cash' && e.isAdvance).length} advance
                     </span>
                     <span>·</span>
                     <span className="text-green-600 font-medium">
-                      {incomeEntries.filter(e => e.paymentMethod === 'Cash' && e.paymentType === 'full').length} full
+                      {filteredIncomeEntries.filter(e => e.paymentMethod === 'Cash' && e.paymentType === 'full').length} full
                     </span>
                     <span>·</span>
                     <span className="text-yellow-600 font-medium">
-                      {incomeEntries.filter(e => e.paymentMethod === 'Cash' && e.paymentType === 'partial').length} partial
+                      {filteredIncomeEntries.filter(e => e.paymentMethod === 'Cash' && e.paymentType === 'partial').length} partial
                     </span>
                   </div>
                 </CardContent>
@@ -509,18 +645,18 @@ export default function Reports() {
                 <CardContent>
                   <p className="text-3xl font-bold text-blue-600">₹{mimIncome.toLocaleString()}</p>
                   <div className="mt-2 flex gap-4 text-xs text-muted-foreground">
-                    <span>{incomeEntries.filter(e => e.paymentMethod === 'MIM').length} total transactions</span>
+                    <span>{filteredIncomeEntries.filter(e => e.paymentMethod === 'MIM').length} total transactions</span>
                     <span>·</span>
                     <span className="text-blue-600 font-medium">
-                      {incomeEntries.filter(e => e.paymentMethod === 'MIM' && e.isAdvance).length} advance
+                      {filteredIncomeEntries.filter(e => e.paymentMethod === 'MIM' && e.isAdvance).length} advance
                     </span>
                     <span>·</span>
                     <span className="text-green-600 font-medium">
-                      {incomeEntries.filter(e => e.paymentMethod === 'MIM' && e.paymentType === 'full').length} full
+                      {filteredIncomeEntries.filter(e => e.paymentMethod === 'MIM' && e.paymentType === 'full').length} full
                     </span>
                     <span>·</span>
                     <span className="text-yellow-600 font-medium">
-                      {incomeEntries.filter(e => e.paymentMethod === 'MIM' && e.paymentType === 'partial').length} partial
+                      {filteredIncomeEntries.filter(e => e.paymentMethod === 'MIM' && e.paymentType === 'partial').length} partial
                     </span>
                   </div>
                 </CardContent>
@@ -530,18 +666,65 @@ export default function Reports() {
             {/* Transaction list */}
             <Card>
               <CardHeader>
-                <CardTitle>All Income Transactions</CardTitle>
+                <div className="flex items-center justify-between">
+                  <CardTitle>All Income Transactions</CardTitle>
+                  {customerSearch && (
+                    <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200">
+                      Filtered by: "{customerSearch}" ({filteredIncomeEntries.length} results)
+                    </Badge>
+                  )}
+                </div>
               </CardHeader>
               <CardContent>
-                {incomeEntries.length === 0 ? (
+                {filteredIncomeEntries.length === 0 ? (
                   <div className="text-center py-12">
                     <Receipt className="h-12 w-12 text-muted-foreground mx-auto mb-4"/>
-                    <p className="text-muted-foreground">No income transactions for this period</p>
+                    <p className="text-muted-foreground">
+                      {customerSearch 
+                        ? `No transactions found for "${customerSearch}"` 
+                        : 'No income transactions for this period'
+                      }
+                    </p>
+                    {customerSearch && (
+                      <Button 
+                        variant="outline" 
+                        size="sm" 
+                        onClick={() => setCustomerSearch('')}
+                        className="mt-2"
+                      >
+                        Clear Search
+                      </Button>
+                    )}
                   </div>
                 ) : (
                   <div className="space-y-3">
-                    {[...incomeEntries]
-                      .sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+                    {[...filteredIncomeEntries]
+                      .sort((a, b) => {
+                        // PRIORITY SORTING: Latest paid amounts come first
+                        // 1. Most recent payment timestamp (latest first)
+                        // 2. Payment type priority (full > final > partial > advance)
+                        // 3. Amount (highest first)
+                        
+                        const dateA = new Date(a.date).getTime();
+                        const dateB = new Date(b.date).getTime();
+                        
+                        // First priority: Most recent payment date
+                        if (dateA !== dateB) {
+                          return dateB - dateA; // Latest payments first
+                        }
+                        
+                        // Second priority: Payment type (full payments are most important)
+                        const typeOrder = { 'full': 4, 'final': 3, 'partial': 2, 'advance': 1 };
+                        const typeA = typeOrder[a.paymentType] || 0;
+                        const typeB = typeOrder[b.paymentType] || 0;
+                        
+                        if (typeA !== typeB) {
+                          return typeB - typeA; // Higher priority first
+                        }
+                        
+                        // Third priority: Amount (highest first)
+                        return b.amount - a.amount;
+                      })
                       .map(entry => {
                         const s = methodStyle(entry.paymentMethod);
                         return (

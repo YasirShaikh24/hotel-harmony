@@ -964,13 +964,16 @@ export default function Billing() {
       }
 
       // Payment Status with better formatting
-      if (invoice.paymentStatus === 'paid') {
+      const totalPaid = paymentHistory.reduce((sum, p) => sum + p.amount, 0);
+      const balanceDue = Math.max(0, invoice.total - totalPaid);
+      
+      if (balanceDue <= 0) {
         doc.setFont('helvetica', 'bold');
         doc.setTextColor(...green);
         const paymentText = `FULLY PAID on ${new Date(invoice.invoiceDate).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}`;
         doc.text(paymentText, margin, y);
         y += 16;
-      } else if (invoice.paymentStatus === 'partial') {
+      } else if (totalPaid > 0) {
         doc.setFont('helvetica', 'bold');
         doc.setTextColor(234, 88, 12);
         doc.text('PARTIALLY PAID', margin, y);
@@ -1326,7 +1329,7 @@ export default function Billing() {
                           </div>
                         </div>
 
-                        {invoice.paymentStatus === 'paid' && (
+                        {invoice.totalPaid >= invoice.total && (
                           <div className="bg-green-50 p-3 rounded-lg border border-green-200 space-y-1">
                             {invoice.advancePaymentMethod && (
                               <div className="flex items-center justify-between text-sm">
@@ -1361,13 +1364,8 @@ export default function Billing() {
                       <Button variant="outline" size="sm" onClick={() => handleShareWhatsApp(invoice)}>
                         <MessageCircle className="h-4 w-4 mr-1" />Share
                       </Button>
-                      {invoice.paymentStatus === 'pending' && !isCustomer && (
+                      {(invoice.totalPaid < invoice.total) && !isCustomer && (
                         <Button size="sm" className="bg-green-600 hover:bg-green-700" onClick={() => setPaymentInvoice(invoice)}>
-                          <CreditCard className="h-4 w-4 mr-1" />Mark as Paid
-                        </Button>
-                      )}
-                      {invoice.paymentStatus === 'partial' && !isCustomer && (
-                        <Button size="sm" className="bg-orange-600 hover:bg-orange-700" onClick={() => setPaymentInvoice(invoice)}>
                           <CreditCard className="h-4 w-4 mr-1" />Mark as Paid
                         </Button>
                       )}

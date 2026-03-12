@@ -11,7 +11,7 @@ import { Calendar } from '@/components/ui/calendar';
 import { Label } from '@/components/ui/label';
 import { Receipt, Download, Eye, CreditCard, Clock, CheckCircle, MessageCircle, CalendarIcon, ChevronDown, ChevronUp, Search } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
-import { invoicesApi } from '@/services/api';
+import { invoicesApi, paymentsApi } from '@/services/api';
 import { useToast } from '@/hooks/use-toast';
 import jsPDF from 'jspdf';
 import { format } from 'date-fns';
@@ -103,6 +103,20 @@ const formatInvoiceNumber = (invoiceId: string, invoiceDate: string, allInvoices
 // VIEW INVOICE MODAL
 // ─────────────────────────────────────────────
 function ViewInvoiceModal({ invoice, isOpen, onClose, allInvoices }: ViewInvoiceModalProps) {
+  const [payments, setPayments] = useState<Payment[]>([]);
+  const [loadingPayments, setLoadingPayments] = useState(false);
+
+  // Fetch payment history when modal opens
+  React.useEffect(() => {
+    if (invoice && isOpen) {
+      setLoadingPayments(true);
+      paymentsApi.getByInvoiceId(invoice.id)
+        .then(setPayments)
+        .catch(console.error)
+        .finally(() => setLoadingPayments(false));
+    }
+  }, [invoice, isOpen]);
+
   if (!invoice) return null;
 
   const currency = (num: number) =>
@@ -183,10 +197,7 @@ function ViewInvoiceModal({ invoice, isOpen, onClose, allInvoices }: ViewInvoice
                   <td className="py-3 text-right text-gray-800">{currency(invoice.additionalCharges)}</td>
                 </tr>
               )}
-              <tr className="border-b border-gray-100">
-                <td className="py-3 text-gray-800">GST (5%)</td>
-                <td className="py-3 text-right text-gray-800">{currency(invoice.cgst + invoice.sgst)}</td>
-              </tr>
+
               <tr className="border-t-2 border-gray-300">
                 <td className="pt-4 pb-2 font-bold text-base text-gray-900">Total Amount</td>
                 <td className="pt-4 pb-2 text-right font-bold text-base text-gray-900">{currency(invoice.total)}</td>
@@ -195,77 +206,61 @@ function ViewInvoiceModal({ invoice, isOpen, onClose, allInvoices }: ViewInvoice
           </table>
 
           {/* PAYMENT HISTORY */}
-          {(invoice.advanceAmount > 0 || (invoice.payments && invoice.payments.length > 0)) && (
+          {(invoice.advanceAmount > 0 || payments.length > 0) && (
             <>
               <hr className="border-gray-300 my-6" />
               <div>
                 <p className="text-xs uppercase tracking-widest text-gray-400 mb-3">Payment History</p>
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b border-gray-200">
-                      <th className="text-left py-2 text-xs text-gray-500 font-medium">Date</th>
-                      <th className="text-left py-2 text-xs text-gray-500 font-medium">Method</th>
-                      <th className="text-left py-2 text-xs text-gray-500 font-medium">Description</th>
-                      <th className="text-right py-2 text-xs text-gray-500 font-medium">Amount (Rs.)</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {invoice.advanceAmount > 0 && (
-                      <tr className="border-b border-gray-100">
-                        <td className="py-2 text-gray-700">{new Date(invoice.checkIn).toLocaleDateString('en-IN')}</td>
-                        <td className="py-2 text-gray-700">
-                          <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
-                            {invoice.advancePaymentMethod || 'Cash'}
-                          </span>
-                        </td>
-                        <td className="py-2 text-gray-700">Advance Payment</td>
-                        <td className="py-2 text-right text-[#16a34a] font-medium">{currency(invoice.advanceAmount)}</td>
+                {loadingPayments ? (
+                  <div className="text-center py-4">
+                    <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary mx-auto"></div>
+                    <p className="text-xs text-gray-500 mt-2">Loading payments...</p>
+                  </div>
+                ) : (
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b border-gray-200">
+                        <th className="text-left py-2 text-xs text-gray-500 font-medium">Date</th>
+                        <th className="text-left py-2 text-xs text-gray-500 font-medium">Method</th>
+                        <th className="text-left py-2 text-xs text-gray-500 font-medium">Description</th>
+                        <th className="text-right py-2 text-xs text-gray-500 font-medium">Amount (Rs.)</th>
                       </tr>
-                    )}
-                    {invoice.payments && invoice.payments.map((payment, index) => (
-                      <tr key={payment.id} className="border-b border-gray-100">
-                        <td className="py-2 text-gray-700">{new Date(payment.paymentDate).toLocaleDateString('en-IN')}</td>
-                        <td className="py-2 text-gray-700">
-                          <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                            {payment.paymentMethod}
-                          </span>
-                        </td>
-                        <td className="py-2 text-gray-700">Payment #{index + 1}</td>
-                        <td className="py-2 text-right text-[#16a34a] font-medium">{currency(payment.amount)}</td>
-                      </tr>
-                    ))}
-                    {invoice.paymentStatus === 'paid' && invoice.paymentMethod && !(invoice.payments && invoice.payments.length > 0) && (
-                      <tr className="border-b border-gray-100">
-                        <td className="py-2 text-gray-700">{new Date(invoice.invoiceDate).toLocaleDateString('en-IN')}</td>
-                        <td className="py-2 text-gray-700">
-                          <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                            {invoice.paymentMethod}
-                          </span>
-                        </td>
-                        <td className="py-2 text-gray-700">
-                          {invoice.advanceAmount > 0 ? 'Remaining Payment' : 'Full Payment'}
-                        </td>
-                        <td className="py-2 text-right text-[#16a34a] font-medium">
-                          {currency(invoice.advanceAmount > 0 ? invoice.total - invoice.advanceAmount : invoice.total)}
+                    </thead>
+                    <tbody>
+                      {/* Show all payments from payments table */}
+                      {payments.map((payment, index) => (
+                        <tr key={payment.id} className="border-b border-gray-100">
+                          <td className="py-2 text-gray-700">{new Date(payment.paymentDate).toLocaleDateString('en-IN')}</td>
+                          <td className="py-2 text-gray-700">
+                            <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
+                              payment.notes?.includes('Advance') ? 'bg-blue-100 text-blue-800' : 'bg-green-100 text-green-800'
+                            }`}>
+                              {payment.paymentMethod}
+                            </span>
+                          </td>
+                          <td className="py-2 text-gray-700">{payment.notes || `Payment #${index + 1}`}</td>
+                          <td className="py-2 text-right text-[#16a34a] font-medium">{currency(payment.amount)}</td>
+                        </tr>
+                      ))}
+                      
+                      {/* Total and balance rows */}
+                      <tr className="border-t-2 border-gray-300 bg-green-50">
+                        <td colSpan={3} className="pt-3 pb-2 font-bold text-gray-900">Total Paid</td>
+                        <td className="pt-3 pb-2 text-right font-bold text-[#16a34a]">
+                          {currency(payments.reduce((sum, p) => sum + p.amount, 0))}
                         </td>
                       </tr>
-                    )}
-                    <tr className="border-t-2 border-gray-300 bg-green-50">
-                      <td colSpan={3} className="pt-3 pb-2 font-bold text-gray-900">Total Paid</td>
-                      <td className="pt-3 pb-2 text-right font-bold text-[#16a34a]">
-                        {currency((invoice.advanceAmount || 0) + (invoice.payments?.reduce((sum, p) => sum + p.amount, 0) || 0))}
-                      </td>
-                    </tr>
-                    {invoice.total > ((invoice.advanceAmount || 0) + (invoice.payments?.reduce((sum, p) => sum + p.amount, 0) || 0)) && (
-                      <tr className="bg-orange-50">
-                        <td colSpan={3} className="py-2 font-bold text-gray-900">Balance Due</td>
-                        <td className="py-2 text-right font-bold text-orange-600">
-                          {currency(invoice.total - ((invoice.advanceAmount || 0) + (invoice.payments?.reduce((sum, p) => sum + p.amount, 0) || 0)))}
-                        </td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
+                      {invoice.total > payments.reduce((sum, p) => sum + p.amount, 0) && (
+                        <tr className="bg-orange-50">
+                          <td colSpan={3} className="py-2 font-bold text-gray-900">Balance Due</td>
+                          <td className="py-2 text-right font-bold text-orange-600">
+                            {currency(invoice.total - payments.reduce((sum, p) => sum + p.amount, 0))}
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                )}
               </div>
             </>
           )}
@@ -305,17 +300,26 @@ function ViewInvoiceModal({ invoice, isOpen, onClose, allInvoices }: ViewInvoice
 function PaymentModal({ invoice, isOpen, onClose }: PaymentModalProps) {
   const [paymentMethod, setPaymentMethod] = useState<'Cash' | 'GPay' | 'MIM'>('Cash');
   const [paymentAmount, setPaymentAmount] = useState(0);
+  const [payments, setPayments] = useState<Payment[]>([]);
+  const [loadingPayments, setLoadingPayments] = useState(false);
 
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
-  // Compute derived values from the invoice
-  const advancePaid = invoice?.advanceAmount ?? 0;
-  const totalAmount = invoice?.total ?? 0;
-  const paymentHistory: Payment[] = invoice?.payments ?? [];
+  // Fetch payment history when modal opens
+  React.useEffect(() => {
+    if (invoice && isOpen) {
+      setLoadingPayments(true);
+      paymentsApi.getByInvoiceId(invoice.id)
+        .then(setPayments)
+        .catch(console.error)
+        .finally(() => setLoadingPayments(false));
+    }
+  }, [invoice, isOpen]);
 
-  // Sum of all recorded payments (advance + any payments array)
-  const totalPaid = advancePaid + paymentHistory.reduce((sum, p) => sum + p.amount, 0);
+  // Compute derived values from the invoice and payments
+  const totalAmount = invoice?.total ?? 0;
+  const totalPaid = payments.reduce((sum, p) => sum + p.amount, 0);
   const remainingAmount = Math.max(0, totalAmount - totalPaid);
   const canMarkAsPaid = remainingAmount <= 0;
 
@@ -333,11 +337,17 @@ function PaymentModal({ invoice, isOpen, onClose }: PaymentModalProps) {
       }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['invoices'] });
+      // Refresh payments list
+      if (invoice) {
+        paymentsApi.getByInvoiceId(invoice.id)
+          .then(setPayments)
+          .catch(console.error);
+      }
       toast({
         title: 'Success',
         description: 'Payment recorded successfully',
       });
-      onClose();
+      setPaymentAmount(0); // Reset amount for next payment
     },
     onError: () => {
       toast({
@@ -397,21 +407,49 @@ function PaymentModal({ invoice, isOpen, onClose }: PaymentModalProps) {
                 ₹{totalAmount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
               </span>
             </div>
-            {advancePaid > 0 && (
+            {loadingPayments ? (
               <div className="flex justify-between items-center text-sm mt-1">
-                <span className="text-gray-600">Advance Paid{invoice.advancePaymentMethod ? ` (${invoice.advancePaymentMethod})` : ''}:</span>
-                <span className="text-green-600 font-medium">
-                  ₹{advancePaid.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-                </span>
+                <span className="text-gray-600">Loading payments...</span>
+                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary"></div>
               </div>
-            )}
-            {paymentHistory.length > 0 && (
-              <div className="flex justify-between items-center text-sm mt-1">
-                <span className="text-gray-600">Other Payments:</span>
-                <span className="text-green-600 font-medium">
-                  ₹{paymentHistory.reduce((s, p) => s + p.amount, 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-                </span>
-              </div>
+            ) : (
+              <>
+                <div className="flex justify-between items-center text-sm mt-1">
+                  <span className="text-gray-600">Total Paid:</span>
+                  <span className="text-green-600 font-medium">
+                    ₹{totalPaid.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                  </span>
+                </div>
+                
+                {/* Payment Breakdown */}
+                {payments.length > 0 && (
+                  <div className="mt-2 pt-2 border-t border-blue-200">
+                    <div className="text-xs text-gray-600 mb-1">Payment Breakdown:</div>
+                    <div className="space-y-1">
+                      {payments.map((payment, index) => (
+                        <div key={payment.id} className="flex justify-between items-center text-xs">
+                          <span className="text-gray-600">
+                            {payment.notes?.includes('Advance') ? (
+                              <span className="inline-flex items-center">
+                                <span className="w-2 h-2 bg-blue-400 rounded-full mr-1"></span>
+                                Advance ({payment.paymentMethod})
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center">
+                                <span className="w-2 h-2 bg-green-400 rounded-full mr-1"></span>
+                                Payment #{index + 1} ({payment.paymentMethod})
+                              </span>
+                            )}
+                          </span>
+                          <span className="text-green-600 font-medium">
+                            ₹{payment.amount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </>
             )}
             <div className="border-t pt-2 mt-2 flex justify-between items-center">
               <span className="text-sm font-bold text-gray-900">Remaining:</span>
@@ -427,31 +465,6 @@ function PaymentModal({ invoice, isOpen, onClose }: PaymentModalProps) {
               </div>
             )}
           </div>
-
-          {/* Payment History */}
-          {paymentHistory.length > 0 && (
-            <div className="space-y-2">
-              <h4 className="text-sm font-semibold text-gray-900">Payment History</h4>
-              <div className="max-h-32 overflow-y-auto space-y-1">
-                {paymentHistory.map((payment, index) => (
-                  <div key={payment.id} className="flex justify-between items-center p-2 bg-gray-50 rounded text-sm">
-                    <div>
-                      <span className="font-medium">Payment #{index + 1}</span>
-                      <span className="text-gray-600 ml-2">via {payment.paymentMethod}</span>
-                    </div>
-                    <div className="text-right">
-                      <div className="font-bold text-green-600">
-                        ₹{payment.amount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-                      </div>
-                      <div className="text-xs text-gray-500">
-                        {new Date(payment.paymentDate).toLocaleDateString('en-IN')}
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
 
           {/* Add New Payment Form */}
           {remainingAmount > 0 && (
@@ -580,10 +593,14 @@ export default function Billing() {
 
   const { data: allInvoices, isLoading, isFetching } = useQuery({
     queryKey: ['invoices', filter, customerEmail],
-    queryFn: () => invoicesApi.getAll(filter, { customerEmail }),
+    queryFn: () => invoicesApi.getAll(filter, { 
+      customerEmail,
+      limit: showAllInvoices ? undefined : 100 // Limit results for better performance
+    }),
     staleTime: 30000,
     refetchOnWindowFocus: false,
     refetchOnMount: false,
+    gcTime: 5 * 60 * 1000, // Cache for 5 minutes
   });
 
   const toggleCard = (invoiceId: string) => {
@@ -628,7 +645,15 @@ export default function Billing() {
     : filterInvoicesByDate(searchFilteredInvoices);
 
   // ─── PDF DOWNLOAD ────────────────────────────────────────────────────────────
-  const handleDownloadPdf = (invoice: Invoice) => {
+  const handleDownloadPdf = async (invoice: Invoice) => {
+    // Fetch payment history for the invoice
+    let paymentHistory: Payment[] = [];
+    try {
+      paymentHistory = await paymentsApi.getByInvoiceId(invoice.id);
+    } catch (error) {
+      console.error('Failed to fetch payment history for PDF:', error);
+    }
+
     const doc = new jsPDF({ unit: 'pt', format: 'a4' });
     const pageWidth = doc.internal.pageSize.getWidth();
     const margin = 45;
@@ -642,6 +667,7 @@ export default function Billing() {
     const lightGray: [number, number, number] = [107, 114, 128];
     const lineGray: [number, number, number] = [200, 200, 200];
     const green: [number, number, number] = [22, 163, 74];
+    const blue: [number, number, number] = [37, 99, 235];
 
     const invoiceNumber = formatInvoiceNumber(invoice.id, invoice.invoiceDate, allInvoices);
 
@@ -765,16 +791,92 @@ export default function Billing() {
       if (invoice.additionalCharges > 0) {
         y = addRow('Additional Charges', invoice.additionalCharges, darkGray, '', y);
       }
-      y = addRow('GST (5%)', invoice.cgst + invoice.sgst, darkGray, '', y);
-      if (invoice.advanceAmount != null && invoice.advanceAmount > 0) {
+
+      // Payment History Section
+      if (paymentHistory.length > 0) {
+        y += 10;
+        doc.setDrawColor(...lineGray);
+        doc.setLineWidth(0.7);
+        doc.line(margin, y, pageWidth - margin, y);
+        y += 16;
+
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(9);
+        doc.setTextColor(...darkGray);
+        doc.text('PAYMENT HISTORY', margin, y);
+        y += 16;
+
+        // Payment history table header
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(7.5);
+        doc.setTextColor(...lightGray);
+        doc.text('DATE', margin, y);
+        doc.text('METHOD', margin + 80, y);
+        doc.text('DESCRIPTION', margin + 160, y);
+        doc.text('AMOUNT (RS.)', pageWidth - margin, y, { align: 'right' });
+        doc.setDrawColor(...lineGray);
+        doc.setLineWidth(0.5);
+        doc.line(margin, y + 4, pageWidth - margin, y + 4);
+        y += 18;
+
+        // Payment history rows
+        paymentHistory.forEach((payment) => {
+          doc.setFont('helvetica', 'normal');
+          doc.setFontSize(8);
+          doc.setTextColor(...darkGray);
+          
+          const paymentDate = new Date(payment.paymentDate).toLocaleDateString('en-IN', { 
+            day: '2-digit', 
+            month: 'short', 
+            year: 'numeric' 
+          });
+          
+          doc.text(paymentDate, margin, y);
+          doc.text(payment.paymentMethod, margin + 80, y);
+          
+          const description = payment.notes || 'Payment';
+          const maxDescWidth = 120;
+          const truncatedDesc = description.length > 20 ? description.substring(0, 17) + '...' : description;
+          doc.text(truncatedDesc, margin + 160, y);
+          
+          doc.setTextColor(...green);
+          doc.text(currency(payment.amount), pageWidth - margin, y, { align: 'right' });
+          
+          doc.setDrawColor(...lineGray);
+          doc.setLineWidth(0.3);
+          doc.line(margin, y + 4, pageWidth - margin, y + 4);
+          y += 16;
+        });
+
+        // Payment totals
+        const totalPaid = paymentHistory.reduce((sum, p) => sum + p.amount, 0);
+        const balanceDue = Math.max(0, invoice.total - totalPaid);
+
+        y += 6;
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(9);
+        doc.setTextColor(...green);
+        doc.text('Total Paid:', margin, y);
+        doc.text(currency(totalPaid), pageWidth - margin, y, { align: 'right' });
+        y += 14;
+
+        if (balanceDue > 0) {
+          doc.setTextColor(234, 88, 12); // Orange color
+          doc.text('Balance Due:', margin, y);
+          doc.text(currency(balanceDue), pageWidth - margin, y, { align: 'right' });
+          y += 14;
+        }
+      }
+
+      if (invoice.advanceAmount != null && invoice.advanceAmount > 0 && paymentHistory.length === 0) {
         y = addRow(
           `Advance Paid${invoice.advancePaymentMethod ? ` (${invoice.advancePaymentMethod})` : ''}`,
           invoice.advanceAmount, green, '-', y
         );
       }
-      if (invoice.paymentStatus === 'paid' && invoice.paymentMethod && invoice.advanceAmount != null && invoice.advanceAmount > 0) {
+      if (invoice.paymentStatus === 'paid' && invoice.paymentMethod && invoice.advanceAmount != null && invoice.advanceAmount > 0 && paymentHistory.length === 0) {
         y = addRow(`Remaining Paid (${invoice.paymentMethod})`, invoice.total - invoice.advanceAmount, green, '-', y);
-      } else if (invoice.paymentStatus === 'paid' && invoice.paymentMethod && (!invoice.advanceAmount || invoice.advanceAmount === 0)) {
+      } else if (invoice.paymentStatus === 'paid' && invoice.paymentMethod && (!invoice.advanceAmount || invoice.advanceAmount === 0) && paymentHistory.length === 0) {
         y = addRow(`Full Payment (${invoice.paymentMethod})`, invoice.total, green, '-', y);
       }
 
@@ -846,13 +948,45 @@ export default function Billing() {
   };
 
   // ── WHATSAPP SHARE ──
-  const handleShareWhatsApp = (invoice: Invoice) => {
+  const handleShareWhatsApp = async (invoice: Invoice) => {
     try {
+      // Fetch payment history for WhatsApp message
+      let paymentHistory: Payment[] = [];
+      try {
+        paymentHistory = await paymentsApi.getByInvoiceId(invoice.id);
+      } catch (error) {
+        console.error('Failed to fetch payment history for WhatsApp:', error);
+      }
+
       const guestInfo = invoice.customer2Name
         ? `*Guests:* ${invoice.customerName} & ${invoice.customer2Name}\n`
         : `*Guest:* ${invoice.customerName}\n`;
       const gstInfo = invoice.customerGstNumber ? `GST No: ${invoice.customerGstNumber}\n` : '';
       const invoiceNumber = formatInvoiceNumber(invoice.id, invoice.invoiceDate, allInvoices);
+
+      // Build payment breakdown
+      let paymentBreakdown = '';
+      if (paymentHistory.length > 0) {
+        paymentBreakdown = '\n*PAYMENT HISTORY*\n';
+        paymentHistory.forEach((payment, index) => {
+          const paymentDate = new Date(payment.paymentDate).toLocaleDateString('en-IN', { 
+            day: '2-digit', 
+            month: 'short' 
+          });
+          const description = payment.notes?.includes('Advance') ? 'Advance' : `Payment #${index + 1}`;
+          paymentBreakdown += `${paymentDate} - ${payment.paymentMethod}: ₹${payment.amount.toLocaleString('en-IN', { minimumFractionDigits: 2 })} (${description})\n`;
+        });
+        
+        const totalPaid = paymentHistory.reduce((sum, p) => sum + p.amount, 0);
+        const balanceDue = Math.max(0, invoice.total - totalPaid);
+        
+        paymentBreakdown += `\n*Total Paid:* ₹${totalPaid.toLocaleString('en-IN', { minimumFractionDigits: 2 })}\n`;
+        if (balanceDue > 0) {
+          paymentBreakdown += `*Balance Due:* ₹${balanceDue.toLocaleString('en-IN', { minimumFractionDigits: 2 })}\n`;
+        }
+      } else if ((invoice.advanceAmount ?? 0) > 0) {
+        paymentBreakdown = `\nAdvance Paid${invoice.advancePaymentMethod ? ` (${invoice.advancePaymentMethod})` : ''}: ₹${(invoice.advanceAmount ?? 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}\n`;
+      }
 
       const message =
         `*🏨 HOTEL KRISHNA - TAX INVOICE*\n\n` +
@@ -873,10 +1007,9 @@ export default function Billing() {
         `*CHARGES BREAKDOWN*\n` +
         `Room Charges: ₹${invoice.roomCharges.toLocaleString('en-IN', { minimumFractionDigits: 2 })}\n` +
         `Additional: ₹${invoice.additionalCharges.toLocaleString('en-IN', { minimumFractionDigits: 2 })}\n` +
-        ((invoice.advanceAmount ?? 0) > 0 ? `Advance Paid${invoice.advancePaymentMethod ? ` (${invoice.advancePaymentMethod})` : ''}: ₹${(invoice.advanceAmount ?? 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}\n` : '') +
         `━━━━━━━━━━━━━━━━━━━━\n` +
         `*TOTAL AMOUNT: ₹${(invoice.roomCharges + invoice.additionalCharges).toLocaleString('en-IN', { minimumFractionDigits: 2 })}*\n` +
-        ((invoice.advanceAmount ?? 0) > 0 ? `*Due Amount: ₹${((invoice.roomCharges + invoice.additionalCharges) - (invoice.advanceAmount ?? 0)).toLocaleString('en-IN', { minimumFractionDigits: 2 })}*\n` : '') +
+        paymentBreakdown +
         `Payment Status: ${invoice.paymentStatus.toUpperCase()}\n\n` +
         `Thank you for choosing Hotel Krishna! 🙏`;
 
@@ -1114,10 +1247,7 @@ export default function Billing() {
                                 <span className="font-medium text-gray-900">₹{invoice.additionalCharges.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
                               </div>
                             )}
-                            <div className="flex justify-between">
-                              <span className="text-gray-700">GST (5%):</span>
-                              <span className="font-medium text-gray-900">₹{(invoice.cgst + invoice.sgst).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
-                            </div>
+
                             {invoice.advanceAmount != null && invoice.advanceAmount > 0 && (
                               <div className="flex justify-between">
                                 <span className="text-gray-700">Advance Paid{invoice.advancePaymentMethod ? ` (${invoice.advancePaymentMethod})` : ''}:</span>

@@ -19,11 +19,27 @@ interface Customer {
   totalRevenue: number;
   lastStay: string | null;
   createdAt: string;
+  contacts?: Array<{
+    id: string;
+    phone: string;
+    email: string;
+    aadhar?: string;
+    address?: string;
+    createdAt: string;
+  }>;
 }
 
-interface CustomerDetails extends Customer {
+interface CustomerDetails {
+  id: string;
+  name: string;
+  phone: string;
+  email: string;
   aadhar?: string;
   address?: string;
+  totalStays: number;
+  totalRevenue: number;
+  lastStay: string | null;
+  createdAt: string;
   bookings: Array<{
     id: string;
     roomNumber: string;
@@ -111,6 +127,18 @@ function CustomerDetailsModal({ customerId, isOpen, onClose }: CustomerDetailsMo
                     })}
                   </p>
                 </div>
+                {customer.aadhar && (
+                  <div>
+                    <p className="text-sm text-gray-600">Aadhar</p>
+                    <p className="font-semibold text-gray-900 font-mono text-sm">{customer.aadhar}</p>
+                  </div>
+                )}
+                {customer.address && (
+                  <div>
+                    <p className="text-sm text-gray-600">Address</p>
+                    <p className="font-semibold text-gray-900">{customer.address}</p>
+                  </div>
+                )}
               </div>
             </div>
 
@@ -404,12 +432,22 @@ export default function Customers() {
                       <tr key={customer.id} className="border-b hover:bg-gray-50 transition-colors">
                         <td className="p-4">
                           <div className="font-medium text-gray-900">{customer.name}</div>
+                          {customer.contacts && customer.contacts.length > 1 && (
+                            <div className="text-xs text-blue-600 mt-1">
+                              {customer.contacts.length} contact records
+                            </div>
+                          )}
                         </td>
                         <td className="p-4">
                           <div className="flex items-center gap-2 text-gray-600">
                             <Phone className="h-4 w-4" />
                             <span>{customer.phone}</span>
                           </div>
+                          {customer.contacts && customer.contacts.length > 1 && (
+                            <div className="text-xs text-gray-500 mt-1">
+                              +{customer.contacts.length - 1} more
+                            </div>
+                          )}
                         </td>
                         <td className="p-4">
                           <div className="flex items-center gap-2 text-gray-600">

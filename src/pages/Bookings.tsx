@@ -121,10 +121,21 @@ function AddBookingModal({ isOpen, onClose }: AddBookingModalProps) {
   const [formData, setFormData] = useState(initialFormData);
   const [selectedRoomPrice, setSelectedRoomPrice] = useState(0);
   const [selectedRoomType, setSelectedRoomType] = useState('');
+  const [roomAvailabilityError, setRoomAvailabilityError] = useState<string>('');
   
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const today = new Date().toISOString().split('T')[0];
+
+  // Reset form when modal opens to ensure advance amount is always 0
+  React.useEffect(() => {
+    if (isOpen) {
+      setFormData(initialFormData);
+      setSelectedRoomPrice(0);
+      setSelectedRoomType('');
+      setRoomAvailabilityError('');
+    }
+  }, [isOpen]);
 
   // Persist every form change automatically
   useEffect(() => {
@@ -143,6 +154,42 @@ function AddBookingModal({ isOpen, onClose }: AddBookingModalProps) {
     queryKey: ['rooms'],
     queryFn: roomsApi.getAll,
   });
+
+  const { data: existingBookings } = useQuery({
+    queryKey: ['bookings'],
+    queryFn: () => bookingsApi.getAll(),
+  });
+
+  // Check room availability for selected dates
+  const checkRoomAvailability = (checkIn: string, checkOut: string) => {
+    if (!checkIn || !checkOut || !existingBookings) {
+      setRoomAvailabilityError('');
+      return;
+    }
+
+    const newCheckIn = new Date(checkIn);
+    const newCheckOut = new Date(checkOut);
+
+    // Find rooms that are booked during the selected dates
+    const bookedRooms = existingBookings
+      .filter((booking: any) => booking.status !== 'cancelled' && booking.status !== 'checked_out')
+      .filter((booking: any) => {
+        const existingCheckIn = new Date(booking.checkIn);
+        const existingCheckOut = new Date(booking.checkOut);
+        return newCheckIn < existingCheckOut && newCheckOut > existingCheckIn;
+      })
+      .map((booking: any) => booking.roomNumber);
+
+    const availableRooms = rooms?.filter((room: any) => !bookedRooms.includes(room.roomNumber)) || [];
+
+    if (availableRooms.length === 0) {
+      setRoomAvailabilityError('No rooms available for the selected dates. Please try different dates.');
+    } else if (bookedRooms.length > 0) {
+      setRoomAvailabilityError(`${bookedRooms.length} room(s) already booked for these dates. ${availableRooms.length} room(s) still available.`);
+    } else {
+      setRoomAvailabilityError('');
+    }
+  };
 
   const addBookingMutation = useMutation({
     mutationFn: bookingsApi.create,
@@ -176,34 +223,33 @@ function AddBookingModal({ isOpen, onClose }: AddBookingModalProps) {
       setSelectedRoomType(room.type);
       const updated = { ...formData, roomNumber };
       setFormData(updated);
-      calculateTotal(formData.checkIn, formData.checkOut, room.price, updated);
-    }
-  };
-
-  const calculateTotal = (
-    checkIn: string,
-    checkOut: string,
-    roomPrice: number,
-    base: typeof initialFormData
-  ) => {
-    if (checkIn && checkOut && roomPrice) {
-      const days = Math.ceil(
-        (new Date(checkOut).getTime() - new Date(checkIn).getTime()) /
-          (1000 * 60 * 60 * 24)
-      );
-      setFormData({ ...base, totalAmount: roomPrice * Math.max(1, days) });
+      
+      // Recalculate total if dates are already selected
+      if (formData.checkIn && formData.checkOut) {
+        const days = Math.ceil(
+          (new Date(formData.checkOut).getTime() - new Date(formData.checkIn).getTime()) /
+            (1000 * 60 * 60 * 24)
+        );
+        setFormData({ ...updated, totalAmount: room.price * Math.max(1, days) });
+      }
     }
   };
 
   const handleDateChange = (field: string, value: string) => {
     const updated = { ...formData, [field]: value };
     setFormData(updated);
-    if ((field === 'checkIn' || field === 'checkOut') && selectedRoomPrice) {
-      const ci = field === 'checkIn' ? value : formData.checkIn;
-      const co = field === 'checkOut' ? value : formData.checkOut;
-      if (ci && co) {
+    
+    // Check room availability when both dates are selected
+    const checkIn = field === 'checkIn' ? value : formData.checkIn;
+    const checkOut = field === 'checkOut' ? value : formData.checkOut;
+    
+    if (checkIn && checkOut) {
+      checkRoomAvailability(checkIn, checkOut);
+      
+      // Recalculate total amount if room is selected
+      if (selectedRoomPrice > 0) {
         const days = Math.ceil(
-          (new Date(co).getTime() - new Date(ci).getTime()) /
+          (new Date(checkOut).getTime() - new Date(checkIn).getTime()) /
             (1000 * 60 * 60 * 24)
         );
         setFormData({ ...updated, totalAmount: selectedRoomPrice * Math.max(1, days) });
@@ -229,6 +275,17 @@ function AddBookingModal({ isOpen, onClose }: AddBookingModalProps) {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    
+    // Validate dates
+    if (formData.checkIn === formData.checkOut) {
+      toast({ 
+        title: 'Invalid Dates', 
+        description: 'Check-out date must be at least 1 day after check-in date', 
+        variant: 'destructive' 
+      });
+      return;
+    }
+    
     if (formData.customerPhone.length !== 10) {
       toast({ title: 'Invalid Mobile Number', description: 'Mobile number must be exactly 10 digits', variant: 'destructive' });
       return;
@@ -407,13 +464,32 @@ function AddBookingModal({ isOpen, onClose }: AddBookingModalProps) {
               <Input
                 id="checkOut"
                 type="date"
-                min={formData.checkIn || today}
+                min={formData.checkIn ? 
+                  new Date(new Date(formData.checkIn).getTime() + 24 * 60 * 60 * 1000).toISOString().split('T')[0] 
+                  : new Date(new Date().getTime() + 24 * 60 * 60 * 1000).toISOString().split('T')[0]
+                }
                 value={formData.checkOut}
                 onChange={(e) => handleDateChange('checkOut', e.target.value)}
                 required
               />
             </div>
           </div>
+
+          {/* Room Availability Alert */}
+          {roomAvailabilityError && (
+            <div className={`p-3 rounded-lg border ${
+              roomAvailabilityError.includes('No rooms available') 
+                ? 'bg-red-50 border-red-200 text-red-700' 
+                : 'bg-yellow-50 border-yellow-200 text-yellow-700'
+            }`}>
+              <div className="flex items-center gap-2">
+                <span className="text-lg">
+                  {roomAvailabilityError.includes('No rooms available') ? '❌' : '⚠️'}
+                </span>
+                <span className="text-sm font-medium">{roomAvailabilityError}</span>
+              </div>
+            </div>
+          )}
 
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
@@ -478,20 +554,12 @@ function AddBookingModal({ isOpen, onClose }: AddBookingModalProps) {
           {formData.totalAmount > 0 && (
             <div className="bg-muted p-4 rounded-lg space-y-2">
               <div className="flex justify-between text-sm">
-                <span>Base Amount:</span>
+                <span>Room Amount:</span>
                 <span className="font-medium">₹{formData.totalAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
               </div>
-              <div className="flex justify-between text-sm">
-                <span>CGST (2.5%):</span>
-                <span className="font-medium">₹{(formData.totalAmount * 0.025).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
-              </div>
-              <div className="flex justify-between text-sm">
-                <span>SGST (2.5%):</span>
-                <span className="font-medium">₹{(formData.totalAmount * 0.025).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
-              </div>
               <div className="border-t pt-2 flex justify-between font-bold text-lg">
-                <span>Total Billing Amount:</span>
-                <span className="text-primary">₹{(formData.totalAmount * 1.05).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                <span>Total Amount:</span>
+                <span className="text-primary">₹{formData.totalAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
               </div>
             </div>
           )}
@@ -965,7 +1033,10 @@ function EditBookingModal({ booking, isOpen, onClose }: EditBookingModalProps) {
               <Input
                 id="editCheckOut"
                 type="date"
-                min={formData.checkIn || today}
+                min={formData.checkIn ? 
+                  new Date(new Date(formData.checkIn).getTime() + 24 * 60 * 60 * 1000).toISOString().split('T')[0] 
+                  : new Date(new Date().getTime() + 24 * 60 * 60 * 1000).toISOString().split('T')[0]
+                }
                 value={formData.checkOut}
                 onChange={(e) => handleDateChange('checkOut', e.target.value)}
                 required
@@ -1036,20 +1107,12 @@ function EditBookingModal({ booking, isOpen, onClose }: EditBookingModalProps) {
           {formData.totalAmount > 0 && (
             <div className="bg-muted p-4 rounded-lg space-y-2">
               <div className="flex justify-between text-sm">
-                <span>Base Amount:</span>
+                <span>Room Amount:</span>
                 <span className="font-medium">₹{formData.totalAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
               </div>
-              <div className="flex justify-between text-sm">
-                <span>CGST (2.5%):</span>
-                <span className="font-medium">₹{(formData.totalAmount * 0.025).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
-              </div>
-              <div className="flex justify-between text-sm">
-                <span>SGST (2.5%):</span>
-                <span className="font-medium">₹{(formData.totalAmount * 0.025).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
-              </div>
               <div className="border-t pt-2 flex justify-between font-bold text-lg">
-                <span>Total Billing Amount:</span>
-                <span className="text-primary">₹{(formData.totalAmount * 1.05).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                <span>Total Amount:</span>
+                <span className="text-primary">₹{formData.totalAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
               </div>
             </div>
           )}

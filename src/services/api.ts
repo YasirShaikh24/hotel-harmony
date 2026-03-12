@@ -200,6 +200,8 @@ export const bookingsApi = {
         adults,
         children,
         special_requests,
+        advance_amount,
+        advance_payment_method,
         created_at,
         customer:customers(id, name, email, mobile),
         room:rooms(*)
@@ -241,14 +243,14 @@ export const bookingsApi = {
       specialRequests: booking.special_requests,
       totalAmount: booking.room
         ? booking.room.price *
-          Math.ceil(
+          Math.max(1, Math.ceil(
             (new Date(booking.check_out).getTime() -
               new Date(booking.check_in).getTime()) /
               (1000 * 60 * 60 * 24)
-          )
+          ))
         : 0,
-      advanceAmount: 0, // Remove since column doesn't exist
-      advancePaymentMethod: null, // Remove since column doesn't exist
+      advanceAmount: booking.advance_amount || 0,
+      advancePaymentMethod: booking.advance_payment_method || null,
       createdAt: booking.created_at,
     }));
   },
@@ -336,7 +338,7 @@ export const bookingsApi = {
       customer = newCustomer;
     }
 
-    // 4️⃣ Create Booking (NO GST HERE ❌)
+    // 4️⃣ Create Booking with advance payment fields
     const insertPayload = {
       customer_id: customer.id,
       room_id: room.id,
@@ -346,6 +348,8 @@ export const bookingsApi = {
       adults: bookingData.adults || 1,
       children: bookingData.children || 0,
       special_requests: bookingData.specialRequests || null,
+      advance_amount: bookingData.advanceAmount || 0,
+      advance_payment_method: bookingData.advancePaymentMethod || null,
     };
 
     const { data: booking, error: bookingError } = await supabase
@@ -356,26 +360,45 @@ export const bookingsApi = {
 
     if (bookingError) throw bookingError;
 
-    // 5️⃣ Create Invoice (NO GST)
-    const days = Math.ceil(
+    // 5️⃣ Create Invoice with advance payment handling
+    const days = Math.max(1, Math.ceil(
       (new Date(bookingData.checkOut).getTime() -
        new Date(bookingData.checkIn).getTime()) /
       (1000 * 60 * 60 * 24)
-    );
+    ));
 
     const roomCharges = room.price * days;
     const total = roomCharges; // No GST added
+    const advanceAmount = bookingData.advanceAmount || 0;
 
-    await supabase.from('invoices').insert({
+    const { data: invoice, error: invoiceError } = await supabase.from('invoices').insert({
       booking_id: booking.id,
       room_charges: roomCharges,
       additional_charges: 0,
-      cgst: 0, // No GST
-      sgst: 0, // No GST
-      total,
-      payment_status: bookingData.advanceAmount > 0 ? 'partial' : 'pending',
-      payment_method: bookingData.advancePaymentMethod || null,
-    });
+      cgst: 0,
+      sgst: 0,
+      total: roomCharges, // No GST - just room charges
+      payment_status: advanceAmount > 0 ? 'partial' : 'pending',
+      payment_method: advanceAmount >= roomCharges ? (bookingData.advancePaymentMethod || null) : null,
+    }).select().single();
+
+    if (invoiceError) throw invoiceError;
+
+    // 6️⃣ Create advance payment record if advance amount exists
+    if (advanceAmount > 0 && bookingData.advancePaymentMethod) {
+      const { error: paymentError } = await supabase.from('payments').insert({
+        invoice_id: invoice.id,
+        amount: advanceAmount,
+        payment_method: bookingData.advancePaymentMethod,
+        notes: 'Advance payment during booking',
+        payment_date: bookingData.checkIn + 'T14:00:00Z', // Use check-in date at 2 PM
+      });
+
+      if (paymentError) {
+        console.warn('Failed to create payment record:', paymentError);
+        // Don't throw error as booking is already created
+      }
+    }
 
     return booking;
   },
@@ -456,6 +479,8 @@ export const invoicesApi = {
           room_id,
           check_in,
           check_out,
+          advance_amount,
+          advance_payment_method,
           customer:customers(id, name, email, mobile),
           room:rooms(*)
         )
@@ -513,20 +538,20 @@ export const invoicesApi = {
       checkOut: invoice.booking?.check_out,
       checkInTime: '2:00 PM', // Default value since column doesn't exist
       checkOutTime: '11:00 AM', // Default value since column doesn't exist
-      days: Math.ceil((new Date(invoice.booking?.check_out || '').getTime() - new Date(invoice.booking?.check_in || '').getTime()) / (1000 * 60 * 60 * 24)),
+      days: Math.max(1, Math.ceil((new Date(invoice.booking?.check_out || '').getTime() - new Date(invoice.booking?.check_in || '').getTime()) / (1000 * 60 * 60 * 24))),
       roomCharges: invoice.room_charges ? parseFloat(invoice.room_charges.toString()) : 0,
       additionalCharges: invoice.additional_charges ? parseFloat(invoice.additional_charges.toString()) : 0,
       cgst: invoice.cgst ? parseFloat(invoice.cgst.toString()) : 0,
       sgst: invoice.sgst ? parseFloat(invoice.sgst.toString()) : 0,
       total: invoice.total ? parseFloat(invoice.total.toString()) : 0,
-      totalPaid: 0, // Remove total_paid since column doesn't exist
-      advanceAmount: 0, // Remove since column doesn't exist
-      advancePaymentMethod: null, // Remove since column doesn't exist
+      totalPaid: 0, // Will be calculated from payments
+      advanceAmount: invoice.booking?.advance_amount || 0,
+      advancePaymentMethod: invoice.booking?.advance_payment_method || null,
       paymentStatus: invoice.payment_status,
       paymentMethod: invoice.payment_method,
       invoiceDate: invoice.created_at.split('T')[0],
       createdAt: invoice.created_at,
-      payments: [], // Remove payments since table doesn't exist
+      payments: [], // Will be populated separately if needed
     }));
   },
   
@@ -550,6 +575,8 @@ export const invoicesApi = {
           room_id,
           check_in,
           check_out,
+          advance_amount,
+          advance_payment_method,
           customer:customers(id, name, email, mobile),
           room:rooms(*)
         )
@@ -580,14 +607,15 @@ export const invoicesApi = {
       checkOut: data.booking?.check_out,
       checkInTime: '2:00 PM', // Default value since column doesn't exist
       checkOutTime: '11:00 AM', // Default value since column doesn't exist
-      days: Math.ceil((new Date(data.booking?.check_out || '').getTime() - new Date(data.booking?.check_in || '').getTime()) / (1000 * 60 * 60 * 24)),
+      days: Math.max(1, Math.ceil((new Date(data.booking?.check_out || '').getTime() - new Date(data.booking?.check_in || '').getTime()) / (1000 * 60 * 60 * 24))),
       roomCharges: data.room_charges ? parseFloat(data.room_charges.toString()) : 0,
       additionalCharges: data.additional_charges ? parseFloat(data.additional_charges.toString()) : 0,
       cgst: data.cgst ? parseFloat(data.cgst.toString()) : 0,
       sgst: data.sgst ? parseFloat(data.sgst.toString()) : 0,
       total: data.total ? parseFloat(data.total.toString()) : 0,
-      advanceAmount: 0, // Remove since column doesn't exist
-      advancePaymentMethod: null, // Remove since column doesn't exist
+      totalPaid: 0, // Will be calculated from payments
+      advanceAmount: data.booking?.advance_amount || 0,
+      advancePaymentMethod: data.booking?.advance_payment_method || null,
       paymentStatus: data.payment_status,
       paymentMethod: data.payment_method,
       invoiceDate: data.created_at.split('T')[0],
@@ -605,7 +633,9 @@ export const invoicesApi = {
           id,
           check_out,
           room_id,
-          status
+          status,
+          advance_amount,
+          advance_payment_method
         )
       `)
       .eq('id', id)
@@ -633,31 +663,23 @@ export const invoicesApi = {
       if (error) throw error;
     }
 
-    // Handle payment recording - update payment_status directly since payments table doesn't exist
+    // Handle new payment recording - create payment record in payments table
     if (updateData.paymentAmount !== undefined && updateData.paymentAmount > 0) {
-      const currentTotal = invoice.total ? parseFloat(invoice.total.toString()) : 0;
-      const advanceAmount = 0; // Remove since column doesn't exist
-      const totalPaid = advanceAmount + parseFloat(updateData.paymentAmount.toString());
-      
-      let newStatus = 'pending';
-      if (totalPaid >= currentTotal) {
-        newStatus = 'paid';
-      } else if (totalPaid > 0) {
-        newStatus = 'partial';
-      }
-      
-      const { error: statusError } = await supabase
-        .from('invoices')
-        .update({
-          payment_status: newStatus,
-          payment_method: updateData.paymentMethod || 'Cash'
-        })
-        .eq('id', id);
-      
-      if (statusError) throw statusError;
+      // Create payment record
+      const { error: paymentError } = await supabase.from('payments').insert({
+        invoice_id: id,
+        amount: parseFloat(updateData.paymentAmount.toString()),
+        payment_method: updateData.paymentMethod || 'Cash',
+        notes: 'Payment via billing interface',
+        payment_date: new Date().toISOString(),
+      });
+
+      if (paymentError) throw paymentError;
+
+      // The trigger will automatically update total_paid and payment_status
     }
 
-    // Get updated invoice data
+    // Get updated invoice data with payments
     const { data: updatedInvoice, error: fetchError } = await supabase
       .from('invoices')
       .select(`
@@ -666,7 +688,9 @@ export const invoicesApi = {
           id,
           check_out,
           room_id,
-          status
+          status,
+          advance_amount,
+          advance_payment_method
         )
       `)
       .eq('id', id)
@@ -899,27 +923,54 @@ export const financialApi = {
   },
 };
 
-// Payments API - Simplified since payments table doesn't exist
+// Payments API - Now works with payments table
 export const paymentsApi = {
   getByInvoiceId: async (invoiceId: string) => {
-    // Return empty array since payments table doesn't exist
-    return [];
+    const { data, error } = await supabase
+      .from('payments')
+      .select('*')
+      .eq('invoice_id', invoiceId)
+      .order('payment_date', { ascending: false });
+    
+    if (error) throw error;
+    
+    return data.map(payment => ({
+      id: payment.id,
+      invoiceId: payment.invoice_id,
+      amount: parseFloat(payment.amount.toString()),
+      paymentMethod: payment.payment_method,
+      paymentDate: payment.payment_date,
+      notes: payment.notes,
+      createdAt: payment.created_at,
+    }));
   },
   
   create: async (paymentData: any) => {
-    // Since payments table doesn't exist, we'll update the invoice directly
+    // Create payment record in payments table
     const { data, error } = await supabase
-      .from('invoices')
-      .update({
+      .from('payments')
+      .insert({
+        invoice_id: paymentData.invoiceId,
+        amount: paymentData.amount,
         payment_method: paymentData.paymentMethod,
-        payment_status: 'paid'
+        notes: paymentData.notes || 'Payment via billing interface',
+        payment_date: new Date().toISOString(),
       })
-      .eq('id', paymentData.invoiceId)
       .select()
       .single();
     
     if (error) throw error;
-    return data;
+    
+    // The trigger will automatically update invoice total_paid and payment_status
+    return {
+      id: data.id,
+      invoiceId: data.invoice_id,
+      amount: parseFloat(data.amount.toString()),
+      paymentMethod: data.payment_method,
+      paymentDate: data.payment_date,
+      notes: data.notes,
+      createdAt: data.created_at,
+    };
   },
 };
 
@@ -939,7 +990,12 @@ export const customersApi = {
         bookings(
           id,
           check_out,
-          invoices(total)
+          room_id,
+          room:rooms(room_number, type),
+          invoices(
+            id,
+            total
+          )
         )
       `)
       .order('created_at', { ascending: false });
@@ -951,32 +1007,92 @@ export const customersApi = {
     const { data, error } = await query;
     if (error) throw error;
     
-    return data.map(customer => {
+    // Group customers by name
+    const customerGroups = new Map<string, any>();
+    
+    data.forEach(customer => {
+      const name = customer.name.trim();
       const bookings = customer.bookings || [];
-      const totalStays = bookings.length;
-      const totalRevenue = bookings.reduce((sum: number, booking: any) => {
-        const invoiceTotal = booking.invoices?.[0]?.total || 0;
-        return sum + parseFloat(invoiceTotal);
-      }, 0);
-      const lastStay = bookings.length > 0 
-        ? bookings.reduce((latest: string, booking: any) => {
-            return booking.check_out > latest ? booking.check_out : latest;
-          }, bookings[0].check_out)
-        : null;
       
-      return {
-        id: customer.id,
-        name: customer.name,
-        phone: customer.mobile,
-        email: customer.email,
-        aadhar: customer.aadhar_encrypted,
-        address: customer.address,
-        totalStays,
-        totalRevenue,
-        lastStay,
-        createdAt: customer.created_at,
-      };
+      if (customerGroups.has(name)) {
+        // Merge with existing customer group
+        const existing = customerGroups.get(name);
+        existing.contacts.push({
+          id: customer.id,
+          phone: customer.mobile,
+          email: customer.email,
+          aadhar: customer.aadhar_encrypted,
+          address: customer.address,
+          createdAt: customer.created_at,
+        });
+        existing.bookings.push(...bookings);
+        existing.totalStays += bookings.length;
+        
+        // Update total revenue
+        const revenue = bookings.reduce((sum: number, booking: any) => {
+          const invoiceTotal = booking.invoices?.[0]?.total || 0;
+          return sum + parseFloat(invoiceTotal.toString());
+        }, 0);
+        existing.totalRevenue += revenue;
+        
+        // Update last stay
+        if (bookings.length > 0) {
+          const latestStay = bookings.reduce((latest: string, booking: any) => {
+            return booking.check_out > latest ? booking.check_out : latest;
+          }, bookings[0].check_out);
+          
+          if (!existing.lastStay || latestStay > existing.lastStay) {
+            existing.lastStay = latestStay;
+          }
+        }
+      } else {
+        // Create new customer group
+        const totalRevenue = bookings.reduce((sum: number, booking: any) => {
+          const invoiceTotal = booking.invoices?.[0]?.total || 0;
+          return sum + parseFloat(invoiceTotal.toString());
+        }, 0);
+        
+        const lastStay = bookings.length > 0 
+          ? bookings.reduce((latest: string, booking: any) => {
+              return booking.check_out > latest ? booking.check_out : latest;
+            }, bookings[0].check_out)
+          : null;
+        
+        customerGroups.set(name, {
+          id: customer.id, // Use first customer ID as primary
+          name: name,
+          contacts: [{
+            id: customer.id,
+            phone: customer.mobile,
+            email: customer.email,
+            aadhar: customer.aadhar_encrypted,
+            address: customer.address,
+            createdAt: customer.created_at,
+          }],
+          bookings: bookings,
+          totalStays: bookings.length,
+          totalRevenue,
+          lastStay,
+          createdAt: customer.created_at,
+        });
+      }
     });
+    
+    // Convert map to array and return
+    return Array.from(customerGroups.values()).map(group => ({
+      id: group.id,
+      name: group.name,
+      phone: group.contacts[0].phone, // Primary contact
+      email: group.contacts[0].email, // Primary contact
+      aadhar: group.contacts[0].aadhar, // Primary contact
+      address: group.contacts[0].address, // Primary contact
+      totalStays: group.totalStays,
+      totalRevenue: group.totalRevenue,
+      lastStay: group.lastStay,
+      createdAt: group.createdAt,
+      contacts: group.contacts, // All contact details for this name
+      bookings: group.bookings, // All bookings for this name
+    }));
   },
   
   getById: async (id: string) => {
@@ -1001,7 +1117,10 @@ export const customersApi = {
       .select(`
         *,
         room:rooms(*),
-        invoices(*)
+        invoices(
+          id,
+          total
+        )
       `)
       .eq('customer_id', id)
       .order('check_in', { ascending: false });
@@ -1017,9 +1136,12 @@ export const customersApi = {
     };
     
     const totalStays = bookings.length;
+    
+    // Calculate total revenue from actual payments received
     const totalRevenue = bookings.reduce((sum, booking) => {
+      // For now, use invoice total until migration is complete
       const invoiceTotal = booking.invoices?.[0]?.total || 0;
-      return sum + (typeof invoiceTotal === 'number' ? invoiceTotal : 0);
+      return sum + (typeof invoiceTotal === 'number' ? invoiceTotal : parseFloat(String(invoiceTotal) || '0'));
     }, 0);
     const lastStay = bookings.length > 0 ? bookings[0].check_out : null;
     
@@ -1045,7 +1167,7 @@ export const customersApi = {
         status: booking.status,
         adults: booking.adults,
         children: booking.children,
-        amount: booking.invoices?.[0]?.total ? parseFloat(booking.invoices[0].total.toString()) : 0,
+        amount: booking.invoices?.[0]?.total ? parseFloat(booking.invoices[0].total.toString() || '0') : 0,
       })),
     };
   },

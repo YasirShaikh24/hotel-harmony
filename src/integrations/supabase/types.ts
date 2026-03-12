@@ -17,6 +17,8 @@ export type Database = {
       bookings: {
         Row: {
           adults: number
+          advance_amount: number | null
+          advance_payment_method: string | null
           check_in: string
           check_out: string
           children: number | null
@@ -30,6 +32,8 @@ export type Database = {
         }
         Insert: {
           adults?: number
+          advance_amount?: number | null
+          advance_payment_method?: string | null
           check_in: string
           check_out: string
           children?: number | null
@@ -43,6 +47,8 @@ export type Database = {
         }
         Update: {
           adults?: number
+          advance_amount?: number | null
+          advance_payment_method?: string | null
           check_in?: string
           check_out?: string
           children?: number | null
@@ -185,6 +191,7 @@ export type Database = {
           room_charges: number
           sgst: number
           total: number
+          total_paid: number | null
           updated_at: string
         }
         Insert: {
@@ -199,6 +206,7 @@ export type Database = {
           room_charges?: number
           sgst?: number
           total?: number
+          total_paid?: number | null
           updated_at?: string
         }
         Update: {
@@ -213,6 +221,7 @@ export type Database = {
           room_charges?: number
           sgst?: number
           total?: number
+          total_paid?: number | null
           updated_at?: string
         }
         Relationships: [
@@ -221,6 +230,44 @@ export type Database = {
             columns: ["booking_id"]
             isOneToOne: false
             referencedRelation: "bookings"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      payments: {
+        Row: {
+          amount: number
+          created_at: string
+          id: string
+          invoice_id: string
+          notes: string | null
+          payment_date: string
+          payment_method: string
+        }
+        Insert: {
+          amount: number
+          created_at?: string
+          id?: string
+          invoice_id: string
+          notes?: string | null
+          payment_date?: string
+          payment_method: string
+        }
+        Update: {
+          amount?: number
+          created_at?: string
+          id?: string
+          invoice_id?: string
+          notes?: string | null
+          payment_date?: string
+          payment_method?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "payments_invoice_id_fkey"
+            columns: ["invoice_id"]
+            isOneToOne: false
+            referencedRelation: "invoices"
             referencedColumns: ["id"]
           },
         ]

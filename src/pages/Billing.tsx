@@ -589,6 +589,57 @@ export default function Billing() {
     return () => clearTimeout(timer);
   }, [searchQuery]);
 
+  // Auto-refresh billing data when new bookings are added
+  React.useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (!document.hidden) {
+        // Page became visible, refresh data
+        queryClient.invalidateQueries({ queryKey: ['invoices'] });
+      }
+    };
+
+    const handleFocus = () => {
+      // Window gained focus, refresh data
+      queryClient.invalidateQueries({ queryKey: ['invoices'] });
+    };
+
+    // Listen for custom events when bookings are created
+    const handleBookingCreated = () => {
+      queryClient.invalidateQueries({ queryKey: ['invoices'] });
+      toast({
+        title: 'Data Updated',
+        description: 'New booking detected. Billing data refreshed.',
+      });
+    };
+
+    // Listen for storage events (cross-tab communication)
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key === 'booking-created' || e.key === 'invoice-updated') {
+        queryClient.invalidateQueries({ queryKey: ['invoices'] });
+      }
+    };
+
+    // Auto-refresh every 30 seconds when page is visible
+    const interval = setInterval(() => {
+      if (!document.hidden) {
+        queryClient.invalidateQueries({ queryKey: ['invoices'] });
+      }
+    }, 30000);
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('focus', handleFocus);
+    window.addEventListener('booking-created', handleBookingCreated);
+    window.addEventListener('storage', handleStorageChange);
+
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('focus', handleFocus);
+      window.removeEventListener('booking-created', handleBookingCreated);
+      window.removeEventListener('storage', handleStorageChange);
+    };
+  }, [queryClient, toast]);
+
   const customerEmail = isCustomer ? user?.email : undefined;
 
   const { data: allInvoices, isLoading, isFetching } = useQuery({
@@ -597,9 +648,11 @@ export default function Billing() {
       customerEmail,
       limit: showAllInvoices ? undefined : 100 // Limit results for better performance
     }),
-    staleTime: 30000,
-    refetchOnWindowFocus: false,
-    refetchOnMount: false,
+    staleTime: 10000, // Reduced from 30s to 10s for faster updates
+    refetchOnWindowFocus: true, // Enable refetch on window focus
+    refetchOnMount: true, // Enable refetch on mount
+    refetchInterval: 30000, // Auto-refetch every 30 seconds
+    refetchIntervalInBackground: false, // Only when tab is active
     gcTime: 5 * 60 * 1000, // Cache for 5 minutes
   });
 
@@ -1047,6 +1100,12 @@ export default function Billing() {
             </h1>
             <p className="text-muted-foreground mt-1">
               {isCustomer ? 'View and download your invoices' : 'Manage billing, invoices, and payments'}
+              {isFetching && (
+                <span className="ml-2 inline-flex items-center gap-1 text-xs text-blue-600">
+                  <div className="animate-spin rounded-full h-3 w-3 border border-blue-600 border-t-transparent"></div>
+                  Refreshing...
+                </span>
+              )}
             </p>
           </div>
         </div>

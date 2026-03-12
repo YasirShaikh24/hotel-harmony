@@ -22,6 +22,7 @@ interface Invoice {
   roomNumber: string;
   customerName: string;
   total: number;
+  totalPaid?: number;
   paymentMethod?: string;
   advancePaymentMethod?: string;
   advanceAmount?: number;
@@ -44,17 +45,19 @@ interface IncomeEntry {
   roomNumber: string;
   customerName: string;
   amount: number;
-  paymentMethod: string;  // 'Cash' | 'GPay'
+  paymentMethod: string;  // 'Cash' | 'GPay' | 'MIM'
   date: string;           // actual date this money was received
   isAdvance: boolean;
   invoiceId: string;
+  paymentType: 'advance' | 'partial' | 'final' | 'full'; // Enhanced payment type tracking
+  paymentId?: string;     // Reference to actual payment record
 }
 
 // ── helpers ────────────────────────────────────────────────────────────
 const normaliseMethod = (m?: string): string => {
   if (!m) return 'Unknown';
   const l = m.toLowerCase().trim();
-  if (l === 'gpay' || l === 'upi') return 'GPay';
+  if (l === 'gpay' || l === 'upi' || l === 'googlepay' || l === 'phonepe' || l === 'paytm') return 'GPay';
   if (l === 'cash') return 'Cash';
   if (l === 'mim') return 'MIM';
   return m;
@@ -102,12 +105,12 @@ export default function Reports() {
     }
   };
 
-  // ── Build flat IncomeEntry list ────────────────────────────────────
+  // ── Build flat IncomeEntry list with advance payments and invoice totals ────────────────────────────────────
   //
-  // Rules:
+  // Simplified Rules:
   //  • Advance payment → own entry, uses advancePaymentMethod + checkIn date
-  //  • Remaining/final → own entry, uses paymentMethod + invoiceDate (checkout day)
-  //  • Single full pay (no advance, paid) → one entry, uses paymentMethod + invoiceDate
+  //  • Total paid amount → calculated from invoice.totalPaid field
+  //  • Show both advance and remaining amounts separately
   //
   // The period filter is applied on the DATE of each individual payment so
   // "Today" shows only money that physically arrived today.
@@ -115,58 +118,58 @@ export default function Reports() {
   const incomeEntries: IncomeEntry[] = [];
 
   (allInvoices as Invoice[]).forEach((inv) => {
-    const advance    = inv.advanceAmount ?? 0;
+    const advance = inv.advanceAmount ?? 0;
+    const totalPaid = inv.totalPaid ?? 0;
     const hasAdvance = advance > 0;
 
     // Date the advance was collected: prefer checkIn, else createdAt, else invoiceDate
     const advanceDate = inv.checkIn || inv.createdAt || inv.invoiceDate;
-    const finalDate   = inv.invoiceDate;
+    const finalDate = inv.invoiceDate;
 
-    if (hasAdvance) {
-      // ── Advance payment entry ──
-      if (inPeriod(advanceDate)) {
-        incomeEntries.push({
-          id:            `${inv.id}-advance`,
-          roomNumber:    inv.roomNumber,
-          customerName:  inv.customerName,
-          amount:        advance,
-          paymentMethod: normaliseMethod(inv.advancePaymentMethod),
-          date:          advanceDate,
-          isAdvance:     true,
-          invoiceId:     inv.id,
-        });
-      }
+    // Add advance payment entry if exists
+    if (hasAdvance && inPeriod(advanceDate)) {
+      incomeEntries.push({
+        id: `${inv.id}-advance`,
+        roomNumber: inv.roomNumber,
+        customerName: inv.customerName,
+        amount: advance,
+        paymentMethod: normaliseMethod(inv.advancePaymentMethod),
+        date: advanceDate,
+        isAdvance: true,
+        invoiceId: inv.id,
+        paymentType: 'advance',
+      });
+    }
 
-      // ── Remaining / final payment entry (only when fully settled) ──
-      if (inv.paymentStatus === 'paid' && inv.paymentMethod) {
-        const remaining = inv.total - advance;
-        if (remaining > 0 && inPeriod(finalDate)) {
-          incomeEntries.push({
-            id:            `${inv.id}-final`,
-            roomNumber:    inv.roomNumber,
-            customerName:  inv.customerName,
-            amount:        remaining,
-            paymentMethod: normaliseMethod(inv.paymentMethod),
-            date:          finalDate,
-            isAdvance:     false,
-            invoiceId:     inv.id,
-          });
-        }
-      }
-    } else {
-      // ── Single full payment (no advance) ──
-      if (inv.paymentStatus === 'paid' && inv.paymentMethod && inPeriod(finalDate)) {
-        incomeEntries.push({
-          id:            `${inv.id}-full`,
-          roomNumber:    inv.roomNumber,
-          customerName:  inv.customerName,
-          amount:        inv.total,
-          paymentMethod: normaliseMethod(inv.paymentMethod),
-          date:          finalDate,
-          isAdvance:     false,
-          invoiceId:     inv.id,
-        });
-      }
+    // Add remaining payment if invoice has been paid beyond advance
+    const remainingPaid = totalPaid - advance;
+    if (remainingPaid > 0 && inPeriod(finalDate)) {
+      incomeEntries.push({
+        id: `${inv.id}-remaining`,
+        roomNumber: inv.roomNumber,
+        customerName: inv.customerName,
+        amount: remainingPaid,
+        paymentMethod: normaliseMethod(inv.paymentMethod || 'Cash'),
+        date: finalDate,
+        isAdvance: false,
+        invoiceId: inv.id,
+        paymentType: remainingPaid >= (inv.total - advance) ? 'final' : 'partial',
+      });
+    }
+
+    // For invoices without advance but with payments
+    if (!hasAdvance && totalPaid > 0 && inPeriod(finalDate)) {
+      incomeEntries.push({
+        id: `${inv.id}-full`,
+        roomNumber: inv.roomNumber,
+        customerName: inv.customerName,
+        amount: totalPaid,
+        paymentMethod: normaliseMethod(inv.paymentMethod || 'Cash'),
+        date: finalDate,
+        isAdvance: false,
+        invoiceId: inv.id,
+        paymentType: totalPaid >= inv.total ? 'full' : 'partial',
+      });
     }
   });
 
@@ -250,7 +253,7 @@ export default function Reports() {
               <CardContent className="p-5">
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">GPay Income</p>
+                    <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">GPay/UPI Income</p>
                     <p className="text-2xl font-bold text-emerald-600 mt-1">₹{gpayIncome.toLocaleString()}</p>
                     <p className="text-xs text-muted-foreground mt-1">
                       {incomeEntries.filter(e => e.paymentMethod === 'GPay').length} txns
@@ -308,9 +311,40 @@ export default function Reports() {
                   <div>
                     <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Total Revenue</p>
                     <p className="text-2xl font-bold text-green-600 mt-1">₹{totalIncome.toLocaleString()}</p>
-                    <p className="text-xs text-muted-foreground mt-1">{incomeEntries.length} transactions</p>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      {incomeEntries.length} transactions
+                      {incomeEntries.filter(e => e.isAdvance).length > 0 &&
+                        ` · ${incomeEntries.filter(e => e.isAdvance).length} advances`
+                      }
+                    </p>
                   </div>
                   <TrendingUp className="h-7 w-7 text-green-500"/>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Payment Summary */}
+            <Card>
+              <CardContent className="p-5">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Payment Summary</p>
+                    <div className="mt-2 space-y-1">
+                      <div className="flex justify-between text-sm">
+                        <span>Advances:</span>
+                        <span className="font-medium text-blue-600">
+                          ₹{incomeEntries.filter(e => e.isAdvance).reduce((s, e) => s + e.amount, 0).toLocaleString()}
+                        </span>
+                      </div>
+                      <div className="flex justify-between text-sm">
+                        <span>Payments:</span>
+                        <span className="font-medium text-green-600">
+                          ₹{incomeEntries.filter(e => !e.isAdvance).reduce((s, e) => s + e.amount, 0).toLocaleString()}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                  <Receipt className="h-7 w-7 text-gray-500"/>
                 </div>
               </CardContent>
             </Card>
@@ -429,8 +463,12 @@ export default function Reports() {
                       {incomeEntries.filter(e => e.paymentMethod === 'GPay' && e.isAdvance).length} advance
                     </span>
                     <span>·</span>
-                    <span className="text-purple-600 font-medium">
-                      {incomeEntries.filter(e => e.paymentMethod === 'GPay' && !e.isAdvance).length} final
+                    <span className="text-green-600 font-medium">
+                      {incomeEntries.filter(e => e.paymentMethod === 'GPay' && e.paymentType === 'full').length} full
+                    </span>
+                    <span>·</span>
+                    <span className="text-yellow-600 font-medium">
+                      {incomeEntries.filter(e => e.paymentMethod === 'GPay' && e.paymentType === 'partial').length} partial
                     </span>
                   </div>
                 </CardContent>
@@ -451,8 +489,12 @@ export default function Reports() {
                       {incomeEntries.filter(e => e.paymentMethod === 'Cash' && e.isAdvance).length} advance
                     </span>
                     <span>·</span>
-                    <span className="text-purple-600 font-medium">
-                      {incomeEntries.filter(e => e.paymentMethod === 'Cash' && !e.isAdvance).length} final
+                    <span className="text-green-600 font-medium">
+                      {incomeEntries.filter(e => e.paymentMethod === 'Cash' && e.paymentType === 'full').length} full
+                    </span>
+                    <span>·</span>
+                    <span className="text-yellow-600 font-medium">
+                      {incomeEntries.filter(e => e.paymentMethod === 'Cash' && e.paymentType === 'partial').length} partial
                     </span>
                   </div>
                 </CardContent>
@@ -473,8 +515,12 @@ export default function Reports() {
                       {incomeEntries.filter(e => e.paymentMethod === 'MIM' && e.isAdvance).length} advance
                     </span>
                     <span>·</span>
-                    <span className="text-purple-600 font-medium">
-                      {incomeEntries.filter(e => e.paymentMethod === 'MIM' && !e.isAdvance).length} final
+                    <span className="text-green-600 font-medium">
+                      {incomeEntries.filter(e => e.paymentMethod === 'MIM' && e.paymentType === 'full').length} full
+                    </span>
+                    <span>·</span>
+                    <span className="text-yellow-600 font-medium">
+                      {incomeEntries.filter(e => e.paymentMethod === 'MIM' && e.paymentType === 'partial').length} partial
                     </span>
                   </div>
                 </CardContent>
@@ -536,14 +582,22 @@ export default function Reports() {
                                         }
                                       </Badge>
 
-                                      {/* Advance / Final badge */}
+                                      {/* Advance / Payment type badge */}
                                       {entry.isAdvance ? (
                                         <Badge className="text-xs font-semibold bg-blue-100 text-blue-700 border border-blue-300 hover:bg-blue-100">
                                           Advance Payment
                                         </Badge>
                                       ) : (
-                                        <Badge className="text-xs font-semibold bg-purple-100 text-purple-700 border border-purple-300 hover:bg-purple-100">
-                                          Final Payment
+                                        <Badge className={`text-xs font-semibold border hover:bg-current/10 ${
+                                          entry.paymentType === 'full' 
+                                            ? 'bg-green-100 text-green-700 border-green-300'
+                                            : entry.paymentType === 'final'
+                                            ? 'bg-purple-100 text-purple-700 border-purple-300'
+                                            : 'bg-yellow-100 text-yellow-700 border-yellow-300'
+                                        }`}>
+                                          {entry.paymentType === 'full' ? 'Full Payment' : 
+                                           entry.paymentType === 'final' ? 'Final Payment' : 
+                                           'Partial Payment'}
                                         </Badge>
                                       )}
                                     </div>
@@ -560,8 +614,17 @@ export default function Reports() {
                                       <span className="italic">
                                         {entry.isAdvance
                                           ? `Advance collected via ${entry.paymentMethod}`
-                                          : `Full/remaining payment via ${entry.paymentMethod}`
+                                          : entry.paymentType === 'full'
+                                          ? `Full payment via ${entry.paymentMethod}`
+                                          : entry.paymentType === 'final'
+                                          ? `Final payment via ${entry.paymentMethod}`
+                                          : `Partial payment via ${entry.paymentMethod}`
                                         }
+                                        {entry.paymentId && (
+                                          <span className="ml-1 text-gray-400">
+                                            (ID: {entry.paymentId.slice(-6)})
+                                          </span>
+                                        )}
                                       </span>
                                     </div>
                                   </div>
@@ -569,11 +632,19 @@ export default function Reports() {
 
                                 {/* Right: amount */}
                                 <div className="text-right shrink-0">
-                                  <p className={`text-2xl font-bold ${entry.isAdvance ? 'text-blue-600' : s.iconText}`}>
+                                  <p className={`text-2xl font-bold ${
+                                    entry.isAdvance ? 'text-blue-600' : 
+                                    entry.paymentType === 'full' ? 'text-green-600' :
+                                    entry.paymentType === 'final' ? 'text-purple-600' :
+                                    'text-yellow-600'
+                                  }`}>
                                     ₹{entry.amount.toLocaleString()}
                                   </p>
                                   <p className="text-xs text-muted-foreground mt-0.5">
-                                    {entry.isAdvance ? 'advance' : 'payment'}
+                                    {entry.isAdvance ? 'advance' : 
+                                     entry.paymentType === 'full' ? 'full pay' :
+                                     entry.paymentType === 'final' ? 'final pay' :
+                                     'partial pay'}
                                   </p>
                                 </div>
 

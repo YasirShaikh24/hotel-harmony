@@ -439,6 +439,7 @@ export const bookingsApi = {
         .eq('id', oldBooking.room_id);
     }
 
+    // Auto-checkout: Make room available when checked out (manual or auto)
     if (updateData.status === 'checked_out' ||
         updateData.status === 'cancelled') {
       await supabase.from('rooms')
@@ -447,6 +448,232 @@ export const bookingsApi = {
     }
 
     return booking;
+  },
+
+  // ================= SHIFT ROOM =================
+  shiftRoom: async (bookingId: string, newRoomId: string) => {
+    try {
+      console.log('Starting room shift:', { bookingId, newRoomId });
+      
+      // Get current booking details
+      const { data: booking, error: bookingError } = await supabase
+        .from('bookings')
+        .select(`
+          id, customer_id, room_id, check_in, check_out, status,
+          room:rooms(id, room_number, price, type)
+        `)
+        .eq('id', bookingId)
+        .single();
+
+      if (bookingError) {
+        console.error('Booking fetch error:', bookingError);
+        throw bookingError;
+      }
+
+      // Get new room details
+      const { data: newRoom, error: newRoomError } = await supabase
+        .from('rooms')
+        .select('*')
+        .eq('id', newRoomId)
+        .single();
+
+      if (newRoomError) {
+        console.error('New room fetch error:', newRoomError);
+        throw newRoomError;
+      }
+
+      // Check if new room is available
+      if (newRoom.status !== 'available') {
+        throw new Error(`Room ${newRoom.room_number} is currently ${newRoom.status}`);
+      }
+
+      // Check for overlapping bookings in new room (excluding current booking)
+      const { data: existingBookings, error: overlapError } = await supabase
+        .from('bookings')
+        .select('*')
+        .eq('room_id', newRoomId)
+        .in('status', ['confirmed', 'checked_in'])
+        .neq('id', bookingId);
+
+      if (overlapError) {
+        console.error('Overlap check error:', overlapError);
+        throw overlapError;
+      }
+
+      const checkIn = new Date(booking.check_in);
+      const checkOut = new Date(booking.check_out);
+
+      const hasOverlap = existingBookings.some((b: any) => {
+        const existingCheckIn = new Date(b.check_in);
+        const existingCheckOut = new Date(b.check_out);
+        return checkIn < existingCheckOut && checkOut > existingCheckIn;
+      });
+
+      if (hasOverlap) {
+        throw new Error(`Room ${newRoom.room_number} has conflicting bookings for these dates`);
+      }
+
+      // Update booking with new room
+      const { data: updatedBooking, error: updateError } = await supabase
+        .from('bookings')
+        .update({ room_id: newRoomId })
+        .eq('id', bookingId)
+        .select()
+        .single();
+
+      if (updateError) {
+        console.error('Booking update error:', updateError);
+        throw updateError;
+      }
+
+      // Update room statuses
+      // Make old room available
+      await supabase.from('rooms')
+        .update({ status: 'available' })
+        .eq('id', booking.room_id);
+
+      // Make new room occupied (if booking is checked_in)
+      if (booking.status === 'checked_in') {
+        await supabase.from('rooms')
+          .update({ status: 'occupied' })
+          .eq('id', newRoomId);
+      }
+
+      // Update invoice with new room charges if there's a price difference
+      const { data: invoice, error: invoiceError } = await supabase
+        .from('invoices')
+        .select('id, room_charges, total')
+        .eq('booking_id', bookingId)
+        .single();
+
+      let priceDifference = 0;
+      if (!invoiceError && invoice) {
+        const days = Math.max(1, Math.ceil(
+          (checkOut.getTime() - checkIn.getTime()) / (1000 * 60 * 60 * 24)
+        ));
+        
+        const newRoomCharges = parseFloat(newRoom.price.toString()) * days;
+        const oldRoomCharges = parseFloat(invoice.room_charges.toString());
+        priceDifference = newRoomCharges - oldRoomCharges;
+        
+        if (priceDifference !== 0) {
+          const newTotal = parseFloat(invoice.total.toString()) + priceDifference;
+          
+          await supabase.from('invoices')
+            .update({
+              room_charges: newRoomCharges,
+              total: newTotal
+            })
+            .eq('id', invoice.id);
+        }
+      }
+
+      // Log the room shift for audit trail
+      await supabase.from('room_shifts').insert({
+        booking_id: bookingId,
+        old_room_id: booking.room_id,
+        new_room_id: newRoomId,
+        price_difference: priceDifference,
+        shift_reason: 'Manual room shift via booking interface'
+      });
+
+      console.log('Room shift completed successfully');
+      
+      return {
+        ...updatedBooking,
+        oldRoom: booking.room,
+        newRoom: newRoom,
+        priceDifference: priceDifference
+      };
+      
+    } catch (error) {
+      console.error('Room shift failed:', error);
+      throw error;
+    }
+  },
+
+  // ================= GET AVAILABLE ROOMS FOR DATE RANGE =================
+  getAvailableRooms: async (checkIn: string, checkOut: string, excludeBookingId?: string) => {
+    try {
+      console.log('Getting available rooms for:', { checkIn, checkOut, excludeBookingId });
+      
+      // Get all rooms with proper ordering
+      const { data: allRooms, error: roomsError } = await supabase
+        .from('rooms')
+        .select('*')
+        .order('room_number');
+
+      if (roomsError) {
+        console.error('Error fetching rooms:', roomsError);
+        throw roomsError;
+      }
+
+      console.log('All rooms:', allRooms?.length);
+
+      // Get all active bookings that could conflict
+      const { data: allBookings, error: bookingsError } = await supabase
+        .from('bookings')
+        .select('id, room_id, check_in, check_out, status')
+        .in('status', ['confirmed', 'checked_in']);
+
+      if (bookingsError) {
+        console.error('Error fetching bookings:', bookingsError);
+        throw bookingsError;
+      }
+
+      console.log('Active bookings:', allBookings?.length);
+
+      const checkInDate = new Date(checkIn);
+      const checkOutDate = new Date(checkOut);
+      const availableRooms = [];
+
+      for (const room of allRooms) {
+        // Get bookings for this specific room
+        const roomBookings = allBookings.filter(booking => 
+          booking.room_id === room.id && 
+          booking.id !== excludeBookingId // Exclude current booking if shifting
+        );
+
+        // Check for date overlaps
+        const hasOverlap = roomBookings.some((booking: any) => {
+          const existingCheckIn = new Date(booking.check_in);
+          const existingCheckOut = new Date(booking.check_out);
+          
+          // Check if dates overlap (booking conflicts)
+          return checkInDate < existingCheckOut && checkOutDate > existingCheckIn;
+        });
+
+        // Only include rooms without conflicts
+        if (!hasOverlap) {
+          availableRooms.push(room);
+        }
+      }
+
+      console.log('Available rooms found:', availableRooms.length);
+
+      // Map room types for consistent display
+      const typeMap: Record<string, string> = {
+        'single': 'Single AC',
+        'double': 'Double AC', 
+        'deluxe': 'Deluxe',
+        'suite': 'Suite',
+        'presidential': 'Presidential'
+      };
+
+      return availableRooms.map(room => ({
+        id: room.id,
+        roomNumber: room.room_number,
+        type: typeMap[room.type] || room.type,
+        price: parseFloat(room.price?.toString() || '0'),
+        status: room.status,
+        floor: room.floor,
+        description: room.description,
+      }));
+      
+    } catch (error) {
+      console.error('Error in getAvailableRooms:', error);
+      throw error;
+    }
   },
 };
 // Invoices API
@@ -470,6 +697,7 @@ export const invoicesApi = {
         cgst,
         sgst,
         total,
+        total_paid,
         payment_status,
         payment_method,
         created_at,
@@ -544,7 +772,7 @@ export const invoicesApi = {
       cgst: invoice.cgst ? parseFloat(invoice.cgst.toString()) : 0,
       sgst: invoice.sgst ? parseFloat(invoice.sgst.toString()) : 0,
       total: invoice.total ? parseFloat(invoice.total.toString()) : 0,
-      totalPaid: 0, // Will be calculated from payments
+      totalPaid: invoice.total_paid ? parseFloat(invoice.total_paid.toString()) : 0,
       advanceAmount: invoice.booking?.advance_amount || 0,
       advancePaymentMethod: invoice.booking?.advance_payment_method || null,
       paymentStatus: invoice.payment_status,
@@ -566,6 +794,7 @@ export const invoicesApi = {
         cgst,
         sgst,
         total,
+        total_paid,
         payment_status,
         payment_method,
         created_at,
@@ -613,7 +842,7 @@ export const invoicesApi = {
       cgst: data.cgst ? parseFloat(data.cgst.toString()) : 0,
       sgst: data.sgst ? parseFloat(data.sgst.toString()) : 0,
       total: data.total ? parseFloat(data.total.toString()) : 0,
-      totalPaid: 0, // Will be calculated from payments
+      totalPaid: data.total_paid ? parseFloat(data.total_paid.toString()) : 0,
       advanceAmount: data.booking?.advance_amount || 0,
       advancePaymentMethod: data.booking?.advance_payment_method || null,
       paymentStatus: data.payment_status,

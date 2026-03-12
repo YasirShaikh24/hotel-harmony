@@ -10,7 +10,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Calendar } from '@/components/ui/calendar';
 import { TimePicker } from '@/components/ui/time-picker';
-import { CalendarCheck, Users, Phone, Mail, Plus, Eye, Edit, LogIn, LogOut, CalendarIcon, Search } from 'lucide-react';
+import { CalendarCheck, Users, Phone, Mail, Plus, Eye, Edit, LogIn, LogOut, CalendarIcon, Search, ArrowRightLeft } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { bookingsApi, roomsApi } from '@/services/api';
 import { useToast } from '@/hooks/use-toast';
@@ -195,6 +195,12 @@ function AddBookingModal({ isOpen, onClose }: AddBookingModalProps) {
     mutationFn: bookingsApi.create,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['bookings'] });
+      queryClient.invalidateQueries({ queryKey: ['invoices'] }); // Also refresh invoices
+      
+      // Trigger cross-component refresh
+      localStorage.setItem('booking-created', Date.now().toString());
+      window.dispatchEvent(new CustomEvent('booking-created'));
+      
       // Clear draft on successful submit
       clearStorage(
         STORAGE_KEYS.ADD_FORM,
@@ -1153,6 +1159,201 @@ function EditBookingModal({ booking, isOpen, onClose }: EditBookingModalProps) {
   );
 }
 
+// ─── Shift Room Modal ─────────────────────────────────────────────────────────
+
+interface ShiftRoomModalProps {
+  booking: Booking | null;
+  isOpen: boolean;
+  onClose: () => void;
+}
+
+function ShiftRoomModal({ booking, isOpen, onClose }: ShiftRoomModalProps) {
+  const [selectedRoomId, setSelectedRoomId] = useState<string>('');
+  const [isLoading, setIsLoading] = useState(false);
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+
+  // Only fetch when modal is open and booking exists
+  const { data: availableRooms, isLoading: roomsLoading, error } = useQuery({
+    queryKey: ['available-rooms', booking?.checkIn, booking?.checkOut, booking?.id],
+    queryFn: async () => {
+      if (!booking) return [];
+      console.log('Fetching available rooms for booking:', booking.id);
+      return bookingsApi.getAvailableRooms(booking.checkIn, booking.checkOut, booking.id);
+    },
+    enabled: isOpen && !!booking,
+    staleTime: 30000, // Cache for 30 seconds
+    retry: 2,
+  });
+
+  const shiftRoomMutation = useMutation({
+    mutationFn: async ({ bookingId, newRoomId }: { bookingId: string; newRoomId: string }) => {
+      setIsLoading(true);
+      try {
+        return await bookingsApi.shiftRoom(bookingId, newRoomId);
+      } finally {
+        setIsLoading(false);
+      }
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ['bookings'] });
+      queryClient.invalidateQueries({ queryKey: ['rooms'] });
+      queryClient.invalidateQueries({ queryKey: ['available-rooms'] });
+      
+      const priceDiff = data.priceDifference || 0;
+      const priceMessage = priceDiff !== 0 
+        ? `. Price difference: ₹${priceDiff > 0 ? '+' : ''}${Math.abs(priceDiff).toLocaleString()}` 
+        : '';
+      
+      toast({
+        title: 'Room Shifted Successfully',
+        description: `Customer moved from Room ${data.oldRoom?.room_number} to Room ${data.newRoom.room_number}${priceMessage}`,
+      });
+      onClose();
+    },
+    onError: (error: any) => {
+      console.error('Room shift error:', error);
+      toast({
+        title: 'Error',
+        description: error.message || 'Failed to shift room',
+        variant: 'destructive',
+      });
+    },
+  });
+
+  const handleShiftRoom = () => {
+    if (!booking || !selectedRoomId || isLoading) return;
+    shiftRoomMutation.mutate({ bookingId: booking.id, newRoomId: selectedRoomId });
+  };
+
+  // Reset state when modal closes
+  useEffect(() => {
+    if (!isOpen) {
+      setSelectedRoomId('');
+      setIsLoading(false);
+    }
+  }, [isOpen]);
+
+  if (!booking) return null;
+
+  return (
+    <Dialog open={isOpen} onOpenChange={onClose}>
+      <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>Shift Room - {booking.customerName}</DialogTitle>
+        </DialogHeader>
+        
+        <div className="space-y-6">
+          {/* Current Room Info */}
+          <div className="bg-blue-50 p-4 rounded-lg">
+            <h3 className="font-medium text-blue-900 mb-2">Current Room</h3>
+            <div className="text-sm text-blue-800">
+              <p><strong>Room {booking.roomNumber}</strong> - {booking.roomType}</p>
+              <p>Check-in: {new Date(booking.checkIn).toLocaleDateString()}</p>
+              <p>Check-out: {new Date(booking.checkOut).toLocaleDateString()}</p>
+            </div>
+          </div>
+
+          {/* Available Rooms */}
+          <div>
+            <Label className="text-base font-medium">Select New Room</Label>
+            
+            {error && (
+              <div className="bg-red-50 border border-red-200 rounded-lg p-4 mt-3">
+                <p className="text-red-800 text-sm">Error loading rooms: {error.message}</p>
+              </div>
+            )}
+            
+            {roomsLoading ? (
+              <div className="text-center py-12">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto"></div>
+                <p className="mt-2 text-sm text-muted-foreground">Loading available rooms...</p>
+              </div>
+            ) : availableRooms && availableRooms.length > 0 ? (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 mt-3 max-h-96 overflow-y-auto">
+                {availableRooms.map((room) => (
+                  <div
+                    key={room.id}
+                    className={`p-4 border rounded-lg cursor-pointer transition-all hover:shadow-md ${
+                      selectedRoomId === room.id
+                        ? 'border-primary bg-primary/10 shadow-md'
+                        : 'border-gray-200 hover:border-gray-300'
+                    }`}
+                    onClick={() => setSelectedRoomId(room.id)}
+                  >
+                    <div className="space-y-2">
+                      <div className="flex justify-between items-start">
+                        <h4 className="font-semibold text-lg">Room {room.roomNumber}</h4>
+                        <Badge variant="outline" className="text-xs bg-green-50 text-green-700 border-green-200">
+                          Available
+                        </Badge>
+                      </div>
+                      
+                      <div className="space-y-1">
+                        <p className="text-sm font-medium text-gray-700">{room.type}</p>
+                        <p className="text-xs text-gray-500">Floor {room.floor}</p>
+                      </div>
+                      
+                      <div className="pt-2 border-t">
+                        <p className="text-lg font-bold text-primary">
+                          ₹{room.price.toLocaleString()}
+                          <span className="text-xs font-normal text-gray-500">/night</span>
+                        </p>
+                      </div>
+                      
+                      {room.description && (
+                        <p className="text-xs text-gray-600 line-clamp-2">{room.description}</p>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="text-center py-12 bg-gray-50 rounded-lg mt-3">
+                <div className="text-gray-400 mb-2">
+                  <svg className="w-12 h-12 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-4m-5 0H9m0 0H5m0 0h2M7 7h10M7 11h6m-6 4h6" />
+                  </svg>
+                </div>
+                <p className="text-gray-600 font-medium">No rooms available</p>
+                <p className="text-sm text-gray-500 mt-1">
+                  All rooms are booked for the selected dates ({new Date(booking.checkIn).toLocaleDateString()} - {new Date(booking.checkOut).toLocaleDateString()})
+                </p>
+              </div>
+            )}
+          </div>
+
+          {/* Action Buttons */}
+          <div className="flex gap-3 pt-4 border-t">
+            <Button
+              onClick={handleShiftRoom}
+              disabled={!selectedRoomId || isLoading || shiftRoomMutation.isPending}
+              className="flex-1"
+            >
+              {isLoading || shiftRoomMutation.isPending ? (
+                <>
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                  Shifting Room...
+                </>
+              ) : (
+                'Shift Room'
+              )}
+            </Button>
+            <Button 
+              type="button" 
+              variant="outline" 
+              onClick={onClose}
+              disabled={isLoading || shiftRoomMutation.isPending}
+            >
+              Cancel
+            </Button>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 // ─── Status helpers ───────────────────────────────────────────────────────────
 
 const getStatusColor = (status: string) => {
@@ -1172,6 +1373,7 @@ export default function Bookings() {
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [viewingBooking, setViewingBooking] = useState<Booking | null>(null);
   const [editingBooking, setEditingBooking] = useState<Booking | null>(null);
+  const [shiftingBooking, setShiftingBooking] = useState<Booking | null>(null);
   const [filter, setFilter] = useState<string>('');
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
   const [showAllBookings, setShowAllBookings] = useState(false);
@@ -1407,6 +1609,11 @@ export default function Bookings() {
                         <Edit className="h-4 w-4 mr-1" />Edit
                       </Button>
                     )}
+                    {(booking.status === 'confirmed' || booking.status === 'checked_in') && !isCustomer && (
+                      <Button variant="outline" size="sm" onClick={() => setShiftingBooking(booking)}>
+                        <ArrowRightLeft className="h-4 w-4 mr-1" />Shift Room
+                      </Button>
+                    )}
                     {booking.status === 'confirmed' && !isCustomer && (
                       <Button size="sm" className="bg-green-600 hover:bg-green-700" onClick={() => handleCheckIn(booking.id)} disabled={updateBookingStatusMutation.isPending}>
                         <LogIn className="h-4 w-4 mr-1" />Check In
@@ -1428,6 +1635,7 @@ export default function Bookings() {
         <AddBookingModal isOpen={isAddModalOpen} onClose={() => setIsAddModalOpen(false)} />
         <ViewBookingModal booking={viewingBooking} isOpen={!!viewingBooking} onClose={() => setViewingBooking(null)} />
         <EditBookingModal booking={editingBooking} isOpen={!!editingBooking} onClose={() => setEditingBooking(null)} />
+        <ShiftRoomModal booking={shiftingBooking} isOpen={!!shiftingBooking} onClose={() => setShiftingBooking(null)} />
       </div>
     </DashboardLayout>
   );

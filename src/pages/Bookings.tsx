@@ -126,70 +126,6 @@ function AddBookingModal({ isOpen, onClose }: AddBookingModalProps) {
   const queryClient = useQueryClient();
   const today = new Date().toISOString().split('T')[0];
 
-  // Helper function to convert 24-hour time to 12-hour AM/PM format
-  const convertTo12Hour = (time24: string): string => {
-    if (!time24) return '12:00 PM';
-    const [hours, minutes] = time24.split(':');
-    const hour = parseInt(hours);
-    const minute = minutes || '00';
-    
-    if (hour === 0) return `12:${minute} AM`;
-    if (hour < 12) return `${hour}:${minute} AM`;
-    if (hour === 12) return `12:${minute} PM`;
-    return `${hour - 12}:${minute} PM`;
-  };
-
-  // Helper function to convert 12-hour AM/PM format to 24-hour format for input
-  const convertTo24Hour = (time12: string): string => {
-    if (!time12) return '12:00';
-    const [time, period] = time12.split(' ');
-    const [hours, minutes] = time.split(':');
-    let hour = parseInt(hours);
-    
-    if (period === 'AM' && hour === 12) hour = 0;
-    if (period === 'PM' && hour !== 12) hour += 12;
-    
-    return `${hour.toString().padStart(2, '0')}:${minutes}`;
-  };
-
-  // Helper function to handle time input change
-  const handleTimeChange = (field: string, value: string) => {
-    const time12 = convertTo12Hour(value);
-    setFormData({ ...formData, [field]: time12 });
-  };
-
-  // Helper function to convert 24-hour time to 12-hour AM/PM format
-  const convertTo12Hour = (time24: string): string => {
-    if (!time24) return '12:00 PM';
-    const [hours, minutes] = time24.split(':');
-    const hour = parseInt(hours);
-    const minute = minutes || '00';
-    
-    if (hour === 0) return `12:${minute} AM`;
-    if (hour < 12) return `${hour}:${minute} AM`;
-    if (hour === 12) return `12:${minute} PM`;
-    return `${hour - 12}:${minute} PM`;
-  };
-
-  // Helper function to convert 12-hour AM/PM format to 24-hour format for input
-  const convertTo24Hour = (time12: string): string => {
-    if (!time12) return '12:00';
-    const [time, period] = time12.split(' ');
-    const [hours, minutes] = time.split(':');
-    let hour = parseInt(hours);
-    
-    if (period === 'AM' && hour === 12) hour = 0;
-    if (period === 'PM' && hour !== 12) hour += 12;
-    
-    return `${hour.toString().padStart(2, '0')}:${minutes}`;
-  };
-
-  // Helper function to handle time input change
-  const handleTimeChange = (field: string, value: string) => {
-    const time12 = convertTo12Hour(value);
-    setFormData({ ...formData, [field]: time12 });
-  };
-
   // Persist every form change automatically
   useEffect(() => {
     saveToStorage(STORAGE_KEYS.ADD_FORM, formData);
@@ -218,7 +154,7 @@ function AddBookingModal({ isOpen, onClose }: AddBookingModalProps) {
         STORAGE_KEYS.ADD_ROOM_PRICE,
         STORAGE_KEYS.ADD_ROOM_TYPE
       );
-      setFormData(addInitialForm);
+      setFormData(initialFormData);
       setSelectedRoomPrice(0);
       setSelectedRoomType('');
       toast({ title: 'Success', description: 'Booking created successfully' });
@@ -248,7 +184,7 @@ function AddBookingModal({ isOpen, onClose }: AddBookingModalProps) {
     checkIn: string,
     checkOut: string,
     roomPrice: number,
-    base: AddForm
+    base: typeof initialFormData
   ) => {
     if (checkIn && checkOut && roomPrice) {
       const days = Math.ceil(
@@ -286,7 +222,7 @@ function AddBookingModal({ isOpen, onClose }: AddBookingModalProps) {
       STORAGE_KEYS.ADD_ROOM_PRICE,
       STORAGE_KEYS.ADD_ROOM_TYPE
     );
-    setFormData(addInitialForm);
+    setFormData(initialFormData);
     setSelectedRoomPrice(0);
     setSelectedRoomType('');
   };
@@ -877,7 +813,7 @@ function EditBookingModal({ booking, isOpen, onClose }: EditBookingModalProps) {
       STORAGE_KEYS.EDIT_FORM(booking.id),
       STORAGE_KEYS.EDIT_ROOM_TYPE(booking.id)
     );
-    const fresh: EditForm = {
+    const fresh = {
       customerName: booking.customerName || '',
       customerEmail: booking.customerEmail || '',
       customerPhone: booking.customerPhone || '',
@@ -887,6 +823,8 @@ function EditBookingModal({ booking, isOpen, onClose }: EditBookingModalProps) {
       roomNumber: booking.roomNumber || '',
       checkIn: booking.checkIn || '',
       checkOut: booking.checkOut || '',
+      checkInTime: booking.checkInTime || '2:00 PM',
+      checkOutTime: booking.checkOutTime || '11:00 AM',
       adults: booking.adults || 1,
       children: booking.children || 0,
       totalAmount: booking.totalAmount || 0,
@@ -1030,28 +968,6 @@ function EditBookingModal({ booking, isOpen, onClose }: EditBookingModalProps) {
                 min={formData.checkIn || today}
                 value={formData.checkOut}
                 onChange={(e) => handleDateChange('checkOut', e.target.value)}
-                required
-              />
-            </div>
-          </div>
-
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="editCheckInTime">Check-in Time</Label>
-              <TimePicker
-                id="editCheckInTime"
-                value={formData.checkInTime}
-                onChange={(time) => setFormData({ ...formData, checkInTime: time })}
-                required
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="editCheckOutTime">Check-out Time</Label>
-              <TimePicker
-                id="editCheckOutTime"
-                value={formData.checkOutTime}
-                onChange={(time) => setFormData({ ...formData, checkOutTime: time })}
                 required
               />
             </div>
@@ -1237,7 +1153,8 @@ export default function Bookings() {
     : filterBookingsByDate(sortedBookings);
 
   // Show "draft exists" indicator on the New Booking button
-  const hasAddDraft = !!loadFromStorage<AddForm | null>(STORAGE_KEYS.ADD_FORM, null)?.customerName;
+  const addFormDraft = loadFromStorage(STORAGE_KEYS.ADD_FORM, null);
+  const hasAddDraft = addFormDraft && (addFormDraft as any).customerName;
 
   if (isLoading) {
     return (

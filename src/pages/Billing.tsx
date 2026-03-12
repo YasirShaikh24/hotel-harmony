@@ -280,28 +280,36 @@ function PaymentModal({ invoice, isOpen, onClose }: PaymentModalProps) {
 
   // Calculate amounts without GST
   const totalAmount = invoice ? (invoice.roomCharges + (invoice.additionalCharges || 0)) : 0;
-  const totalPaid = invoice?.totalPaid || 0;
-  const remainingAmount = totalAmount - totalPaid;
+  const paidAmount = invoice?.advanceAmount || 0;
+  const remainingAmount = totalAmount - paidAmount;
 
   React.useEffect(() => {
     if (invoice) {
-      setPaymentAmount(remainingAmount > 0 ? Math.min(remainingAmount, 1000) : 0);
+      setPaymentAmount(remainingAmount);
     }
   }, [invoice, remainingAmount]);
 
-  const addPaymentMutation = useMutation({
-    mutationFn: ({ invoiceId, amount, method }: { invoiceId: string; amount: number; method: string }) => 
-      paymentsApi.create({ invoiceId, amount, paymentMethod: method }),
   const updatePaymentMutation = useMutation({
-    mutationFn: ({ id, status, method }: { id: string; status: string; method: string }) =>
-      invoicesApi.update(id, { paymentStatus: status, paymentMethod: method }),
+    mutationFn: ({ id, status, method, amount }: { id: string; status: string; method: string; amount: number }) => 
+      invoicesApi.update(id, { 
+        paymentStatus: status, 
+        paymentMethod: method,
+        paymentAmount: amount 
+      }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['invoices'] });
-      toast({ title: 'Success', description: 'Payment recorded successfully' });
+      toast({
+        title: 'Success',
+        description: 'Payment recorded successfully',
+      });
       onClose();
     },
     onError: () => {
-      toast({ title: 'Error', description: 'Failed to record payment', variant: 'destructive' });
+      toast({
+        title: 'Error',
+        description: 'Failed to record payment',
+        variant: 'destructive',
+      });
     },
   });
 
@@ -329,17 +337,26 @@ function PaymentModal({ invoice, isOpen, onClose }: PaymentModalProps) {
       return;
     }
 
-    addPaymentMutation.mutate({ 
-      invoiceId: invoice.id, 
-      amount: paymentAmount,
-      method: paymentMethod
+    // Check if trying to mark as paid with partial amount
+    if (paymentAmount < remainingAmount) {
+      toast({
+        title: 'Partial Payment',
+        description: `Recording partial payment of ₹${paymentAmount}. Remaining: ₹${remainingAmount - paymentAmount}`,
+      });
+    }
+
+    // Determine final status
+    const finalStatus = paymentAmount >= remainingAmount ? 'paid' : 'partial';
+
+    updatePaymentMutation.mutate({ 
+      id: invoice.id, 
+      status: finalStatus, 
+      method: paymentMethod,
+      amount: paymentAmount
     });
   };
 
   if (!invoice) return null;
-
-  const paymentHistory = invoice.payments || [];
-  const canMarkAsPaid = remainingAmount <= 0;
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>

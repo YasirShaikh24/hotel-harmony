@@ -69,219 +69,208 @@ interface PaymentModalProps {
 
 const getPaymentStatusColor = (status: string) => {
   switch (status) {
-    case 'paid':
-      return 'bg-green-100 text-green-800 border-green-200';
-    case 'partial':
-      return 'bg-blue-100 text-blue-800 border-blue-200';
-    case 'pending':
-      return 'bg-yellow-100 text-yellow-800 border-yellow-200';
-    default:
-      return 'bg-gray-100 text-gray-800 border-gray-200';
+    case 'paid': return 'bg-green-100 text-green-800 border-green-200';
+    case 'partial': return 'bg-blue-100 text-blue-800 border-blue-200';
+    case 'pending': return 'bg-yellow-100 text-yellow-800 border-yellow-200';
+    default: return 'bg-gray-100 text-gray-800 border-gray-200';
   }
 };
 
 const getPaymentStatusIcon = (status: string) => {
   switch (status) {
-    case 'paid':
-      return <CheckCircle className="h-4 w-4" />;
-    case 'partial':
-      return <Clock className="h-4 w-4" />;
-    case 'pending':
-      return <Clock className="h-4 w-4" />;
-    default:
-      return <Receipt className="h-4 w-4" />;
+    case 'paid': return <CheckCircle className="h-4 w-4" />;
+    case 'partial': return <Clock className="h-4 w-4" />;
+    case 'pending': return <Clock className="h-4 w-4" />;
+    default: return <Receipt className="h-4 w-4" />;
   }
 };
 
-// Generate human-readable invoice number
 const formatInvoiceNumber = (invoiceId: string, invoiceDate: string, allInvoices?: Invoice[]) => {
-  // If we have all invoices, calculate sequential number based on date order
   if (allInvoices) {
-    const sortedByDate = [...allInvoices].sort((a, b) => 
+    const sortedByDate = [...allInvoices].sort((a, b) =>
       new Date(a.createdAt || a.invoiceDate).getTime() - new Date(b.createdAt || b.invoiceDate).getTime()
     );
     const index = sortedByDate.findIndex(inv => inv.id === invoiceId);
     const sequentialNumber = String(index + 1).padStart(3, '0');
     return `INV-${sequentialNumber}`;
   }
-  
-  // Fallback: use last 3 characters of UUID as number
   const shortId = parseInt(invoiceId.slice(-6), 16) % 1000;
   const sequentialNumber = String(shortId).padStart(3, '0');
   return `INV-${sequentialNumber}`;
 };
 
+// ─────────────────────────────────────────────
+// VIEW INVOICE MODAL — matches the image format
+// ─────────────────────────────────────────────
 function ViewInvoiceModal({ invoice, isOpen, onClose, allInvoices }: ViewInvoiceModalProps) {
   if (!invoice) return null;
 
+  const currency = (num: number) =>
+    'Rs.' + num.toLocaleString('en-IN', { minimumFractionDigits: 2 });
+
+  const invoiceNumber = formatInvoiceNumber(invoice.id, invoice.invoiceDate, allInvoices);
+
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="sm:max-w-4xl max-h-[90vh] overflow-y-auto bg-white p-0">
-        
-        <div className="p-12 bg-white text-gray-900">
+      <DialogContent className="sm:max-w-2xl max-h-[95vh] overflow-y-auto p-0 bg-white">
+        {/* Invoice body — white background, clean typography */}
+        <div className="p-10 bg-white text-gray-900 font-sans">
 
-          {/* HEADER WITH LOGO */}
-          <div className="grid grid-cols-2 items-start">
-
-            {/* LEFT SIDE - Logo + Hotel Info */}
-            <div className="flex items-start gap-4">
-
+          {/* ── HEADER ── */}
+          <div className="flex items-start justify-between">
+            {/* Left: Logo + Hotel name */}
+            <div className="flex items-center gap-4">
               <img
                 src="/hk.png"
                 alt="Hotel Krishna"
-                className="h-16 w-16 object-contain"
+                className="h-16 w-16 rounded-full object-contain border-2 border-[#1a3a5c]"
                 onError={(e) => {
-                  e.currentTarget.style.display = "none";
+                  const el = e.currentTarget as HTMLImageElement;
+                  el.style.display = 'none';
                 }}
               />
-
               <div>
-                <h1 className="text-3xl font-semibold tracking-wide">
-                  HOTEL KRISHNA
-                </h1>
-                <p className="text-sm text-gray-600 mt-2">
-                  1st Floor Lalita Tower, Vadodara - 390005
-                </p>
-                <p className="text-sm text-gray-600">
-                  Phone: +91 9426786111 | info@hotelkrishna.com
-                </p>
+                <h1 className="text-2xl font-bold tracking-wide text-gray-900">HOTEL KRISHNA</h1>
+                <p className="text-xs text-gray-500 mt-1">1st Floor Lalita Tower, Vadodara - 390005</p>
+                <p className="text-xs text-gray-500">Phone: +91 9638003036 | info@hotelkrishna.com</p>
               </div>
-
             </div>
-
-            {/* RIGHT SIDE - Invoice Info */}
+            {/* Right: TAX INVOICE label + meta */}
             <div className="text-right">
-              <h2 className="text-lg font-semibold uppercase tracking-widest">
-                Tax Invoice
-              </h2>
-
-              <div className="mt-4 space-y-1 text-sm">
-                <div>
-                  <span className="font-medium">Invoice #:</span>{" "}
-                  {formatInvoiceNumber(invoice.id, invoice.invoiceDate, allInvoices)}
-                </div>
-                <div>
-                  <span className="font-medium">Date:</span>{" "}
-                  {new Date(invoice.invoiceDate).toLocaleDateString("en-IN")}
-                </div>
-              </div>
+              <h2 className="text-2xl font-bold text-gray-900 uppercase tracking-wider">TAX INVOICE</h2>
+              <p className="text-xs text-gray-600 mt-2">Invoice #: {invoiceNumber}</p>
+              <p className="text-xs text-gray-600">Date: {new Date(invoice.invoiceDate).toLocaleDateString('en-IN')}</p>
             </div>
-
           </div>
 
-          <div className="border-t border-gray-400 my-8"></div>
+          <hr className="border-gray-300 my-6" />
 
-          {/* BILL TO & STAY DETAILS */}
-          <div className="grid grid-cols-2 gap-24 text-sm">
-
-          <div>
-          <h3 className="uppercase text-xs tracking-widest text-gray-500 mb-3">
-            Bill To
-          </h3>
-
-          <p className="font-medium">{invoice.customerName}</p>
-          {invoice.customer2Name && <p>{invoice.customer2Name}</p>}
-          <p>{invoice.customerEmail}</p>
-          <p>{invoice.customerPhone}</p>
-
-          {/* Customer GST Number */}
-          {invoice.customerGstNumber && invoice.customerGstNumber.trim() !== "" && (
-            <div className="mt-3">
-              <p className="text-xs uppercase tracking-wide text-gray-500">
-                Customer GSTIN
-              </p>
-              <p className="font-medium text-gray-800">
-                {invoice.customerGstNumber}
-              </p>
-            </div>
-          )}
-        </div>
+          {/* ── BILL TO & STAY DETAILS ── */}
+          <div className="grid grid-cols-2 gap-8 text-sm">
             <div>
-              <h3 className="uppercase text-xs tracking-widest text-gray-500 mb-3">
-                Stay Details
-              </h3>
-
-              <p>Room: {invoice.roomNumber}</p>
-              <p>
-                Check-in: {new Date(invoice.checkIn).toLocaleDateString("en-IN")}{invoice.checkInTime && ` at ${invoice.checkInTime}`}
-              </p>
-              <p>
-                Check-out: {new Date(invoice.checkOut).toLocaleDateString("en-IN")}{invoice.checkOutTime && ` at ${invoice.checkOutTime}`}
-              </p>
-              <p>Duration: {invoice.days} Night(s)</p>
+              <p className="text-xs uppercase tracking-widest text-gray-400 mb-2">Bill To</p>
+              <p className="font-semibold text-gray-900">{invoice.customerName}</p>
+              {invoice.customer2Name && <p className="text-gray-700">{invoice.customer2Name}</p>}
+              <p className="text-gray-600">{invoice.customerEmail}</p>
+              <p className="text-gray-600">{invoice.customerPhone}</p>
+              {invoice.customerGstNumber && invoice.customerGstNumber.trim() !== '' && (
+                <p className="text-gray-600 mt-1">GSTIN: {invoice.customerGstNumber}</p>
+              )}
             </div>
-
+            <div>
+              <p className="text-xs uppercase tracking-widest text-gray-400 mb-2">Stay Details</p>
+              <p className="text-gray-700">Room: {invoice.roomNumber}</p>
+              <p className="text-gray-700">Check-in: {new Date(invoice.checkIn).toLocaleDateString('en-IN')}</p>
+              <p className="text-gray-700">Check-out: {new Date(invoice.checkOut).toLocaleDateString('en-IN')}</p>
+              <p className="text-gray-700">Duration: {invoice.days} Night{invoice.days > 1 ? 's' : ''}</p>
+            </div>
           </div>
 
-          <div className="border-t border-gray-400 my-8"></div>
+          <hr className="border-gray-300 my-6" />
 
-          {/* TABLE */}
+          {/* ── CHARGES TABLE ── */}
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b border-gray-400 text-left uppercase text-xs tracking-widest text-gray-500">
-                <th className="py-3">Description</th>
-                <th className="py-3 text-right">Amount (₹)</th>
+              <tr className="border-b border-gray-300">
+                <th className="text-left py-2 text-xs uppercase tracking-widest text-gray-400 font-medium">Description</th>
+                <th className="text-right py-2 text-xs uppercase tracking-widest text-gray-400 font-medium">Amount (Rs.)</th>
               </tr>
             </thead>
             <tbody>
-              <tr>
-                <td className="py-3">Room Charges ({invoice.days} night{invoice.days > 1 ? 's' : ''})</td>
-                <td className="py-3 text-right">
-                  {invoice.roomCharges.toLocaleString("en-IN", { minimumFractionDigits: 2 })}
-                </td>
+              {/* Room Charges */}
+              <tr className="border-b border-gray-100">
+                <td className="py-3 text-gray-800">Room Charges ({invoice.days} night{invoice.days > 1 ? 's' : ''})</td>
+                <td className="py-3 text-right text-gray-800">{currency(invoice.roomCharges)}</td>
               </tr>
 
+              {/* Additional Charges — only if > 0 */}
               {invoice.additionalCharges > 0 && (
-                <tr>
-                  <td className="py-3">Additional Charges</td>
-                  <td className="py-3 text-right">
-                    {invoice.additionalCharges.toLocaleString("en-IN", { minimumFractionDigits: 2 })}
-                  </td>
+                <tr className="border-b border-gray-100">
+                  <td className="py-3 text-gray-800">Additional Charges</td>
+                  <td className="py-3 text-right text-gray-800">{currency(invoice.additionalCharges)}</td>
                 </tr>
               )}
 
-              <tr className="border-t border-gray-400 font-semibold">
-                <td className="py-4 text-base">Total Amount</td>
-                <td className="py-4 text-right text-base">
-                  {(invoice.roomCharges + invoice.additionalCharges).toLocaleString("en-IN", { minimumFractionDigits: 2 })}
-                </td>
+              {/* GST combined */}
+              <tr className="border-b border-gray-100">
+                <td className="py-3 text-gray-800">GST (5%)</td>
+                <td className="py-3 text-right text-gray-800">{currency(invoice.cgst + invoice.sgst)}</td>
               </tr>
 
-              {invoice.advanceAmount && invoice.advanceAmount > 0 && (
-                <>
-                  <tr>
-                    <td className="py-3">Advance Paid</td>
-                    <td className="py-3 text-right text-green-600">
-                      -{invoice.advanceAmount.toLocaleString("en-IN", { minimumFractionDigits: 2 })}
-                    </td>
-                  </tr>
-                  <tr className="font-semibold">
-                    <td className="py-3">Due Amount</td>
-                    <td className="py-3 text-right">
-                      {((invoice.roomCharges + invoice.additionalCharges) - invoice.advanceAmount).toLocaleString("en-IN", { minimumFractionDigits: 2 })}
-                    </td>
-                  </tr>
-                </>
+              {/* Advance Paid — green */}
+              {invoice.advanceAmount != null && invoice.advanceAmount > 0 && (
+                <tr className="border-b border-gray-100">
+                  <td className="py-3 text-[#16a34a]">
+                    Advance Paid{invoice.advancePaymentMethod ? ` (${invoice.advancePaymentMethod})` : ''}
+                  </td>
+                  <td className="py-3 text-right text-[#16a34a]">-{currency(invoice.advanceAmount)}</td>
+                </tr>
               )}
+
+              {/* Remaining Paid — green, only when fully paid and advance exists */}
+              {invoice.paymentStatus === 'paid' &&
+                invoice.paymentMethod &&
+                invoice.advanceAmount != null &&
+                invoice.advanceAmount > 0 && (
+                  <tr className="border-b border-gray-100">
+                    <td className="py-3 text-[#16a34a]">Remaining Paid ({invoice.paymentMethod})</td>
+                    <td className="py-3 text-right text-[#16a34a]">
+                      -{currency(invoice.total - invoice.advanceAmount)}
+                    </td>
+                  </tr>
+                )}
+
+              {/* Total Amount row */}
+              <tr className="border-t-2 border-gray-300">
+                <td className="pt-4 pb-2 font-bold text-base text-gray-900">Total Amount</td>
+                <td className="pt-4 pb-2 text-right font-bold text-base text-gray-900">{currency(invoice.total)}</td>
+              </tr>
             </tbody>
           </table>
 
-          <div className="border-t border-gray-400 mt-12 pt-6 text-center text-xs text-gray-500">
-            Thank you for staying with Hotel Krishna.
+          {/* ── PAYMENT INFO (below total, matching image) ── */}
+          <hr className="border-gray-200 mt-4 mb-4" />
+          <div className="text-sm space-y-1 text-gray-600">
+            {invoice.advancePaymentMethod && (
+              <p>Initial Payment Mode: {invoice.advancePaymentMethod}</p>
+            )}
+            {invoice.paymentMethod && (
+              <p>Final Payment Mode: {invoice.paymentMethod}</p>
+            )}
+            {invoice.paymentStatus === 'paid' && (
+              <p className="font-bold text-[#16a34a] mt-1">
+                Fully Paid on{' '}
+                {new Date(invoice.invoiceDate).toLocaleDateString('en-IN', {
+                  day: '2-digit',
+                  month: 'short',
+                  year: 'numeric',
+                })}
+              </p>
+            )}
+            {invoice.paymentStatus === 'partial' && (
+              <p className="font-bold text-orange-500 mt-1">Partially Paid</p>
+            )}
+            {invoice.paymentStatus === 'pending' && (
+              <p className="font-bold text-red-500 mt-1">Payment Pending</p>
+            )}
           </div>
 
-          <div className="mt-8">
-            <Button onClick={onClose} className="w-full">
-              Close
-            </Button>
-          </div>
+          {/* ── FOOTER ── */}
+          <hr className="border-gray-200 mt-8 mb-4" />
+          <p className="text-center text-xs text-gray-400">Thank you for staying with Hotel Krishna.</p>
 
+          <div className="mt-6">
+            <Button onClick={onClose} className="w-full">Close</Button>
+          </div>
         </div>
-
       </DialogContent>
     </Dialog>
   );
 }
+
+// ─────────────────────────────────────────────
+// PAYMENT MODAL
+// ─────────────────────────────────────────────
 function PaymentModal({ invoice, isOpen, onClose }: PaymentModalProps) {
   const [paymentMethod, setPaymentMethod] = useState<'Cash' | 'GPay' | 'MIM'>('Cash');
   const [paymentAmount, setPaymentAmount] = useState(0);
@@ -303,20 +292,16 @@ function PaymentModal({ invoice, isOpen, onClose }: PaymentModalProps) {
   const addPaymentMutation = useMutation({
     mutationFn: ({ invoiceId, amount, method }: { invoiceId: string; amount: number; method: string }) => 
       paymentsApi.create({ invoiceId, amount, paymentMethod: method }),
+  const updatePaymentMutation = useMutation({
+    mutationFn: ({ id, status, method }: { id: string; status: string; method: string }) =>
+      invoicesApi.update(id, { paymentStatus: status, paymentMethod: method }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['invoices'] });
-      toast({
-        title: 'Success',
-        description: 'Payment recorded successfully',
-      });
+      toast({ title: 'Success', description: 'Payment recorded successfully' });
       onClose();
     },
     onError: () => {
-      toast({
-        title: 'Error',
-        description: 'Failed to record payment',
-        variant: 'destructive',
-      });
+      toast({ title: 'Error', description: 'Failed to record payment', variant: 'destructive' });
     },
   });
 
@@ -541,6 +526,9 @@ function PaymentModal({ invoice, isOpen, onClose }: PaymentModalProps) {
   );
 }
 
+// ─────────────────────────────────────────────
+// MAIN BILLING PAGE
+// ─────────────────────────────────────────────
 export default function Billing() {
   const { user, isCustomer } = useAuth();
   const [filter, setFilter] = useState<string>('');
@@ -550,127 +538,164 @@ export default function Billing() {
   const [showAllInvoices, setShowAllInvoices] = useState(false);
   const [expandedCards, setExpandedCards] = useState<string[]>([]);
   const [searchQuery, setSearchQuery] = useState<string>('');
+  const [debouncedSearch, setDebouncedSearch] = useState<string>('');
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
-  const { data: invoices, isLoading } = useQuery({
-    queryKey: ['invoices', filter],
-    queryFn: () => invoicesApi.getAll(filter),
+  React.useEffect(() => {
+    const timer = setTimeout(() => { setDebouncedSearch(searchQuery.trim()); }, 400);
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
+
+  const dateFilter = showAllInvoices ? undefined : format(selectedDate, 'yyyy-MM-dd');
+  const customerEmail = isCustomer ? user?.email : undefined;
+  const limit = showAllInvoices ? undefined : 100;
+
+  const { data: invoices, isLoading, isFetching } = useQuery({
+    queryKey: ['invoices', filter, dateFilter, debouncedSearch, customerEmail],
+    queryFn: () => invoicesApi.getAll(filter, { date: dateFilter, search: debouncedSearch || undefined, customerEmail, limit }),
+    staleTime: 30000,
+    refetchOnWindowFocus: false,
+    refetchOnMount: false,
   });
 
   const toggleCard = (invoiceId: string) => {
-    setExpandedCards(prev => 
-      prev.includes(invoiceId) 
-        ? prev.filter(id => id !== invoiceId)
-        : [...prev, invoiceId]
+    setExpandedCards(prev =>
+      prev.includes(invoiceId) ? prev.filter(id => id !== invoiceId) : [...prev, invoiceId]
     );
   };
 
   const updatePaymentStatusMutation = useMutation({
-    mutationFn: ({ id, status }: { id: string; status: string }) => 
+    mutationFn: ({ id, status }: { id: string; status: string }) =>
       invoicesApi.update(id, { paymentStatus: status }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['invoices'] });
-      toast({
-        title: 'Success',
-        description: 'Payment status updated successfully',
-      });
+      toast({ title: 'Success', description: 'Payment status updated successfully' });
     },
     onError: () => {
-      toast({
-        title: 'Error',
-        description: 'Failed to update payment status',
-        variant: 'destructive',
-      });
+      toast({ title: 'Error', description: 'Failed to update payment status', variant: 'destructive' });
     },
   });
 
-  // Filter invoices by selected date
   const filterInvoicesByDate = (invoicesList: Invoice[]) => {
-    if (showAllInvoices) {
-      return invoicesList;
-    }
-    
+    if (showAllInvoices) return invoicesList;
     const selectedDateStr = format(selectedDate, 'yyyy-MM-dd');
-    return invoicesList.filter((invoice: Invoice) => {
-      const invoiceDate = invoice.invoiceDate;
-      // Show invoices where invoice date matches the selected date
-      return invoiceDate === selectedDateStr;
-    });
+    return invoicesList.filter((invoice: Invoice) => invoice.invoiceDate === selectedDateStr);
   };
 
-  // Sort invoices by creation date (newest first)
-  const sortedInvoices = invoices ? [...invoices].sort((a: Invoice, b: Invoice) => {
-    const dateA = new Date(a.createdAt || a.invoiceDate).getTime();
-    const dateB = new Date(b.createdAt || b.invoiceDate).getTime();
-    return dateB - dateA; // Newest first
-  }) : [];
+  const sortedInvoices = invoices ? [...invoices].sort((a: Invoice, b: Invoice) =>
+    new Date(b.createdAt || b.invoiceDate).getTime() - new Date(a.createdAt || a.invoiceDate).getTime()
+  ) : [];
 
-  // Filter by search query (customer name or room number)
   const searchFilteredInvoices = sortedInvoices.filter((invoice: Invoice) => {
     if (!searchQuery.trim()) return true;
     const query = searchQuery.toLowerCase();
-    return (
-      invoice.customerName?.toLowerCase().includes(query) ||
-      invoice.roomNumber?.toLowerCase().includes(query)
-    );
+    return invoice.customerName?.toLowerCase().includes(query) || invoice.roomNumber?.toLowerCase().includes(query);
   });
 
-  // Filter invoices for customers to show only their own
-  const displayInvoices = isCustomer 
+  const displayInvoices = isCustomer
     ? filterInvoicesByDate(searchFilteredInvoices.filter((invoice: Invoice) => invoice.customerEmail === user?.email))
     : filterInvoicesByDate(searchFilteredInvoices);
 
+  // ─────────────────────────────────────────────
+  // PDF DOWNLOAD — matches the exact invoice image
+  // ─────────────────────────────────────────────
   const handleDownloadPdf = (invoice: Invoice) => {
-  const doc = new jsPDF();
-  let y = 20;
+    const doc = new jsPDF({ unit: 'pt', format: 'a4' });
+    const pageWidth = doc.internal.pageSize.getWidth();
+    const margin = 45;
+    const contentWidth = pageWidth - margin * 2;
 
-  const currency = (num: number) =>
-    num.toLocaleString('en-IN', { minimumFractionDigits: 2 });
+    const currency = (num: number) =>
+      'Rs.' + num.toLocaleString('en-IN', { minimumFractionDigits: 2 });
 
-  // Header
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(22);
-  doc.text('HOTEL KRISHNA', 20, y);
+    // Colour palette
+    const black: [number, number, number] = [17, 24, 39];
+    const darkGray: [number, number, number] = [55, 65, 81];
+    const lightGray: [number, number, number] = [107, 114, 128];
+    const lineGray: [number, number, number] = [200, 200, 200];
+    const green: [number, number, number] = [22, 163, 74];
 
-  doc.setFontSize(9);
-  doc.setFont('helvetica', 'normal');
-  doc.text('1st Floor Lalita Tower, Vadodara - 390005', 20, y + 6);
-  doc.text('Phone: +91 9426786111 | info@hotelkrishna.com', 20, y + 11);
+    const invoiceNumber = formatInvoiceNumber(invoice.id, invoice.invoiceDate, invoices);
 
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(11);
-  doc.text('TAX INVOICE', 160, y, { align: 'right' });
+    const renderPdf = () => {
+      let y = margin;
 
-  doc.setFont('helvetica', 'normal');
-  doc.setFontSize(9);
-  doc.text(`Invoice #: ${formatInvoiceNumber(invoice.id, invoice.invoiceDate, invoices)}`, 160, y + 6, { align: 'right' });
-  doc.text(
-    `Date: ${new Date(invoice.invoiceDate).toLocaleDateString('en-IN')}`,
-    160,
-    y + 11,
-    { align: 'right' }
-  );
+      // ── LOGO ──
+      const logoImg = new Image();
+      logoImg.src = '/hk.png';
+      try {
+        doc.addImage(logoImg, 'PNG', margin, y, 50, 50);
+      } catch {
+        // fallback circle
+        doc.setFillColor(26, 58, 92);
+        doc.circle(margin + 25, y + 25, 25, 'F');
+        doc.setTextColor(255, 255, 255);
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(14);
+        doc.text('HK', margin + 25, y + 30, { align: 'center' });
+      }
 
-  y += 20;
-  doc.line(20, y, 190, y);
+      // ── HOTEL NAME ──
+      doc.setTextColor(...black);
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(20);
+      doc.text('HOTEL KRISHNA', margin + 60, y + 18);
 
-  // Bill To
-  y += 10;
-  doc.setFont('helvetica', 'bold');
-  doc.text('BILL TO', 20, y);
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(8.5);
+      doc.setTextColor(...lightGray);
+      doc.text('1st Floor Lalita Tower, Vadodara - 390005', margin + 60, y + 32);
+      doc.text('Phone: +91 9638003036 | krishnahotel138@gmail.com', margin + 60, y + 44);
 
-  doc.setFont('helvetica', 'normal');
-  y += 6;
-  doc.text(invoice.customerName, 20, y);
-  y += 5;
-  doc.text(invoice.customerEmail, 20, y);
-  y += 5;
-  doc.text(invoice.customerPhone, 20, y);
-  if (invoice.customerGstNumber) {
-    y += 5;
-    doc.text(`GSTIN: ${invoice.customerGstNumber}`, 20, y);
-  }
+      // ── TAX INVOICE (right) ──
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(18);
+      doc.setTextColor(...black);
+      doc.text('TAX INVOICE', pageWidth - margin, y + 14, { align: 'right' });
+
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(8.5);
+      doc.setTextColor(...darkGray);
+      doc.text(`Invoice #: ${invoiceNumber}`, pageWidth - margin, y + 30, { align: 'right' });
+      doc.text(`Date: ${new Date(invoice.invoiceDate).toLocaleDateString('en-IN')}`, pageWidth - margin, y + 42, { align: 'right' });
+
+      y += 62;
+
+      // ── DIVIDER ──
+      doc.setDrawColor(...lineGray);
+      doc.setLineWidth(0.7);
+      doc.line(margin, y, pageWidth - margin, y);
+      y += 20;
+
+      // ── BILL TO / STAY DETAILS ──
+      const col2X = margin + contentWidth / 2 + 10;
+
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(7.5);
+      doc.setTextColor(...lightGray);
+      doc.text('BILL TO', margin, y);
+      doc.text('STAY DETAILS', col2X, y);
+      y += 14;
+
+      // Bill To
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(10);
+      doc.setTextColor(...black);
+      doc.text(invoice.customerName, margin, y);
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(9);
+      doc.setTextColor(...darkGray);
+      let billY = y + 13;
+      if (invoice.customer2Name) {
+        doc.text(invoice.customer2Name, margin, billY);
+        billY += 13;
+      }
+      doc.text(invoice.customerEmail, margin, billY); billY += 13;
+      doc.text(invoice.customerPhone, margin, billY); billY += 13;
+      if (invoice.customerGstNumber && invoice.customerGstNumber.trim()) {
+        doc.text(`GSTIN: ${invoice.customerGstNumber}`, margin, billY); billY += 13;
+      }
 
   // Stay Details
   doc.setFont('helvetica', 'bold');
@@ -708,79 +733,127 @@ export default function Billing() {
     doc.text(currency(value), 180, y, { align: 'right' });
   };
 
-  addRow('Room Charges', invoice.roomCharges);
-  if (invoice.additionalCharges > 0) {
-    addRow('Additional Charges', invoice.additionalCharges);
-  }
+      // Room Charges
+      addRow(`Room Charges (${invoice.days} night${invoice.days > 1 ? 's' : ''})`, invoice.roomCharges);
 
-  y += 10;
-  doc.line(120, y, 190, y);
+      // Additional Charges
+      if (invoice.additionalCharges > 0) {
+        addRow('Additional Charges', invoice.additionalCharges);
+      }
 
-  y += 8;
-  doc.setFont('helvetica', 'bold');
-  doc.text('TOTAL', 120, y);
-  doc.text(currency(invoice.total), 180, y, { align: 'right' });
+      // GST (5%)
+      addRow('GST (5%)', invoice.cgst + invoice.sgst);
 
-  if (invoice.advanceAmount > 0) {
-    y += 8;
-    doc.setFont('helvetica', 'normal');
-    doc.text('Advance Paid', 120, y);
-    doc.text('-' + currency(invoice.advanceAmount), 180, y, { align: 'right' });
+      // Advance Paid — green
+      if (invoice.advanceAmount != null && invoice.advanceAmount > 0) {
+        addRow(
+          `Advance Paid${invoice.advancePaymentMethod ? ` (${invoice.advancePaymentMethod})` : ''}`,
+          invoice.advanceAmount,
+          green,
+          '-'
+        );
+      }
 
-    y += 8;
-    doc.setFont('helvetica', 'bold');
-    doc.text('DUE AMOUNT', 120, y);
-    doc.text(
-      currency(invoice.total - invoice.advanceAmount),
-      180,
-      y,
-      { align: 'right' }
-    );
-  }
+      // Remaining Paid — green
+      if (
+        invoice.paymentStatus === 'paid' &&
+        invoice.paymentMethod &&
+        invoice.advanceAmount != null &&
+        invoice.advanceAmount > 0
+      ) {
+        addRow(
+          `Remaining Paid (${invoice.paymentMethod})`,
+          invoice.total - invoice.advanceAmount,
+          green,
+          '-'
+        );
+      }
 
-  // Payment Status
-  y += 15;
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(10);
-  const statusText = invoice.paymentStatus === 'paid' 
-    ? 'PAYMENT STATUS: PAID' 
-    : invoice.paymentStatus === 'partial'
-    ? 'PAYMENT STATUS: PARTIALLY PAID'
-    : 'PAYMENT STATUS: PENDING';
-  doc.text(statusText, 20, y);
-  
-  if (invoice.paymentMethod && invoice.paymentStatus === 'paid') {
-    doc.setFont('helvetica', 'normal');
-    doc.setFontSize(9);
-    y += 6;
-    doc.text('Payment Method: ' + invoice.paymentMethod, 20, y);
-  }
+      // ── TOTAL ROW ──
+      doc.setDrawColor(...lineGray);
+      doc.setLineWidth(0.7);
+      doc.line(margin, y, pageWidth - margin, y);
+      y += 12;
 
-  y += 10;
-  doc.line(20, y, 190, y);
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(12);
+      doc.setTextColor(...black);
+      doc.text('Total Amount', margin, y);
+      doc.text(currency(invoice.total), pageWidth - margin, y, { align: 'right' });
+      y += 24;
 
-  y += 10;
-  doc.setFontSize(9);
-  doc.setFont('helvetica', 'normal');
-  doc.text('Thank you for staying with us.', 105, y, { align: 'center' });
+      // ── PAYMENT INFO ──
+      doc.setDrawColor(...lineGray);
+      doc.setLineWidth(0.5);
+      doc.line(margin, y, pageWidth - margin, y);
+      y += 14;
 
-  const invoiceNumber = formatInvoiceNumber(invoice.id, invoice.invoiceDate, invoices);
-  doc.save(`${invoiceNumber}.pdf`);
-};
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(9);
+      doc.setTextColor(...darkGray);
+
+      if (invoice.advancePaymentMethod) {
+        doc.text(`Initial Payment Mode: ${invoice.advancePaymentMethod}`, margin, y);
+        y += 14;
+      }
+      if (invoice.paymentMethod) {
+        doc.text(`Final Payment Mode: ${invoice.paymentMethod}`, margin, y);
+        y += 14;
+      }
+
+      if (invoice.paymentStatus === 'paid') {
+        doc.setFont('helvetica', 'bold');
+        doc.setTextColor(...green);
+        doc.text(
+          `Fully Paid on ${new Date(invoice.invoiceDate).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}`,
+          margin, y
+        );
+        y += 16;
+      } else if (invoice.paymentStatus === 'partial') {
+        doc.setFont('helvetica', 'bold');
+        doc.setTextColor(234, 88, 12);
+        doc.text('Partially Paid', margin, y);
+        y += 16;
+      } else {
+        doc.setFont('helvetica', 'bold');
+        doc.setTextColor(220, 38, 38);
+        doc.text('Payment Pending', margin, y);
+        y += 16;
+      }
+
+      // ── FOOTER ──
+      const pageHeight = doc.internal.pageSize.getHeight();
+      doc.setDrawColor(...lineGray);
+      doc.setLineWidth(0.5);
+      doc.line(margin, pageHeight - 40, pageWidth - margin, pageHeight - 40);
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(8);
+      doc.setTextColor(...lightGray);
+      doc.text('Thank you for staying with Hotel Krishna.', pageWidth / 2, pageHeight - 26, { align: 'center' });
+
+      doc.save(`${invoiceNumber}.pdf`);
+    };
+
+    // Trigger render (logo may already be cached)
+    const logoImg = new Image();
+    logoImg.src = '/hk.png';
+    logoImg.onload = renderPdf;
+    logoImg.onerror = renderPdf;
+  };
+
+  // ── WHATSAPP SHARE ──
   const handleShareWhatsApp = (invoice: Invoice) => {
     try {
-      // Format the invoice details for WhatsApp
-      const guestInfo = invoice.customer2Name 
+      const guestInfo = invoice.customer2Name
         ? `*Guests:* ${invoice.customerName} & ${invoice.customer2Name}\n`
         : `*Guest:* ${invoice.customerName}\n`;
-      
-      const gstInfo = invoice.customerGstNumber 
-        ? `GST No: ${invoice.customerGstNumber}\n`
-        : '';
-      
-      const message = `*🏨 HOTEL KRISHNA - TAX INVOICE*\n\n` +
-        `Invoice No: ${invoice.id}\n` +
-        `Date: ${new Date(invoice.invoiceDate).toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric' })}\n\n` +
+      const gstInfo = invoice.customerGstNumber ? `GST No: ${invoice.customerGstNumber}\n` : '';
+      const invoiceNumber = formatInvoiceNumber(invoice.id, invoice.invoiceDate, invoices);
+
+      const message =
+        `*🏨 HOTEL KRISHNA - TAX INVOICE*\n\n` +
+        `Invoice No: ${invoiceNumber}\n` +
+        `Date: ${new Date(invoice.invoiceDate).toLocaleDateString('en-IN')}\n\n` +
         `━━━━━━━━━━━━━━━━━━━━\n` +
         `*GUEST INFORMATION*\n` +
         guestInfo +
@@ -802,45 +875,24 @@ export default function Billing() {
         (invoice.advanceAmount > 0 ? `*Due Amount: ₹${((invoice.roomCharges + invoice.additionalCharges) - invoice.advanceAmount).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}*\n` : '') +
         `Payment Status: ${invoice.paymentStatus.toUpperCase()}${invoice.paymentStatus === 'paid' && invoice.paymentMethod ? ` via ${invoice.paymentMethod}` : invoice.paymentStatus === 'partial' && invoice.advancePaymentMethod ? ` (Advance via ${invoice.advancePaymentMethod})` : ''}\n\n` +
         `Thank you for choosing Hotel Krishna! 🙏`;
-      
-      // Remove country code if present and format phone number
-      let phoneNumber = invoice.customerPhone.replace(/\D/g, '');
-      if (phoneNumber.length === 10) {
-        phoneNumber = '91' + phoneNumber; // Add India country code
-      }
-      
-      // Create WhatsApp URL
-      const whatsappUrl = `https://wa.me/${phoneNumber}?text=${encodeURIComponent(message)}`;
-      
-      // Open WhatsApp in new window
-      window.open(whatsappUrl, '_blank');
-      
-      toast({
-        title: 'Success',
-        description: 'Opening WhatsApp to share invoice',
-      });
-    } catch (error) {
-      console.error('WhatsApp share error:', error);
-      toast({
-        title: 'Error',
-        description: 'Failed to share via WhatsApp',
-        variant: 'destructive',
-      });
-    }
-  };
 
-  const handleMarkAsPaid = (invoice: Invoice) => {
-    setPaymentInvoice(invoice);
+      let phoneNumber = invoice.customerPhone.replace(/\D/g, '');
+      if (phoneNumber.length === 10) phoneNumber = '91' + phoneNumber;
+
+      const whatsappUrl = `https://wa.me/${phoneNumber}?text=${encodeURIComponent(message)}`;
+      window.open(whatsappUrl, '_blank');
+      toast({ title: 'Success', description: 'Opening WhatsApp to share invoice' });
+    } catch (error) {
+      toast({ title: 'Error', description: 'Failed to share via WhatsApp', variant: 'destructive' });
+    }
   };
 
   if (isLoading) {
     return (
       <DashboardLayout>
-        <div className="space-y-6 animate-fade-in">
-          <div className="text-center py-12">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto"></div>
-            <p className="mt-4 text-muted-foreground">Loading invoices...</p>
-          </div>
+        <div className="text-center py-12">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto"></div>
+          <p className="mt-4 text-muted-foreground">Loading invoices...</p>
         </div>
       </DashboardLayout>
     );
@@ -849,6 +901,7 @@ export default function Billing() {
   return (
     <DashboardLayout>
       <div className="space-y-6 animate-fade-in">
+
         {/* Header */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div>
@@ -856,97 +909,54 @@ export default function Billing() {
               {isCustomer ? 'My Invoices' : 'Billing & Invoices'}
             </h1>
             <p className="text-muted-foreground mt-1">
-              {isCustomer 
-                ? 'View and download your invoices'
-                : 'Manage billing, invoices, and payments'
-              }
+              {isCustomer ? 'View and download your invoices' : 'Manage billing, invoices, and payments'}
             </p>
           </div>
         </div>
 
-        {/* Compact Date Filter Bar */}
+        {/* Date Filter Bar */}
         <Card className="bg-[#2c4a6b] border-0 shadow-lg">
           <CardContent className="p-4">
             <div className="flex items-center justify-between gap-4 flex-wrap">
-              {/* Compact Date Display */}
               <div className="flex items-center gap-4">
                 <div className="bg-white/20 backdrop-blur-sm rounded-lg px-4 py-2 border border-white/30 flex items-center gap-3">
                   <div className="text-center">
-                    <div className="text-3xl font-bold text-white leading-none">
-                      {format(selectedDate, 'dd')}
-                    </div>
-                    <div className="text-xs text-white/80 uppercase">
-                      {format(selectedDate, 'MMM')}
-                    </div>
+                    <div className="text-3xl font-bold text-white leading-none">{format(selectedDate, 'dd')}</div>
+                    <div className="text-xs text-white/80 uppercase">{format(selectedDate, 'MMM')}</div>
                   </div>
                   <div className="h-10 w-px bg-white/30"></div>
                   <div>
-                    <div className="text-sm font-medium text-white/80">
-                      {format(selectedDate, 'EEEE')}
-                    </div>
-                    <div className="text-xs text-white/70">
-                      {format(selectedDate, 'yyyy')}
-                    </div>
+                    <div className="text-sm font-medium text-white/80">{format(selectedDate, 'EEEE')}</div>
+                    <div className="text-xs text-white/70">{format(selectedDate, 'yyyy')}</div>
                   </div>
                 </div>
-                
                 <div className="bg-white/20 backdrop-blur-sm rounded-lg px-4 py-2 border border-white/30">
-                  <div className="text-xs text-white/80 mb-0.5">
-                    {showAllInvoices ? 'All Invoices' : 'Today\'s Invoices'}
-                  </div>
-                  <div className="text-2xl font-bold text-white leading-none">
-                    {displayInvoices?.length || 0}
-                  </div>
+                  <div className="text-xs text-white/80 mb-0.5">{showAllInvoices ? 'All Invoices' : "Today's Invoices"}</div>
+                  <div className="text-2xl font-bold text-white leading-none">{displayInvoices?.length || 0}</div>
                 </div>
               </div>
-              
-              {/* Compact Action Buttons */}
               <div className="flex items-center gap-2">
                 <Popover>
                   <PopoverTrigger asChild>
-                    <Button 
-                      size="sm"
-                      className="bg-white text-[#2c4a6b] hover:bg-blue-50 font-semibold shadow-md"
-                    >
-                      <CalendarIcon className="h-4 w-4 mr-1" />
-                      Select Date
+                    <Button size="sm" className="bg-white text-[#2c4a6b] hover:bg-blue-50 font-semibold shadow-md">
+                      <CalendarIcon className="h-4 w-4 mr-1" />Select Date
                     </Button>
                   </PopoverTrigger>
                   <PopoverContent className="w-auto p-0" align="end">
                     <Calendar
                       mode="single"
                       selected={selectedDate}
-                      onSelect={(date) => {
-                        if (date) {
-                          setSelectedDate(date);
-                          setShowAllInvoices(false);
-                        }
-                      }}
+                      onSelect={(date) => { if (date) { setSelectedDate(date); setShowAllInvoices(false); } }}
                       initialFocus
                     />
                   </PopoverContent>
                 </Popover>
-                
-                <Button 
-                  size="sm"
-                  onClick={() => setShowAllInvoices(!showAllInvoices)}
-                  className={`font-semibold shadow-md ${
-                    showAllInvoices 
-                      ? 'bg-white text-[#2c4a6b] hover:bg-blue-50' 
-                      : 'bg-white/20 text-white border border-white/30 hover:bg-white/30'
-                  }`}
-                >
+                <Button size="sm" onClick={() => setShowAllInvoices(!showAllInvoices)}
+                  className={`font-semibold shadow-md ${showAllInvoices ? 'bg-white text-[#2c4a6b] hover:bg-blue-50' : 'bg-white/20 text-white border border-white/30 hover:bg-white/30'}`}>
                   {showAllInvoices ? 'Today Only' : 'Show All'}
                 </Button>
-                
-                <Button 
-                  size="sm"
-                  onClick={() => {
-                    setSelectedDate(new Date());
-                    setShowAllInvoices(false);
-                  }}
-                  className="bg-white/20 text-white border border-white/30 hover:bg-white/30 font-semibold shadow-md"
-                >
+                <Button size="sm" onClick={() => { setSelectedDate(new Date()); setShowAllInvoices(false); }}
+                  className="bg-white/20 text-white border border-white/30 hover:bg-white/30 font-semibold shadow-md">
                   Today
                 </Button>
               </div>
@@ -957,25 +967,12 @@ export default function Billing() {
         {/* Filter Buttons */}
         {!isCustomer && (
           <div className="flex gap-2">
-            <Button 
-              variant={filter === '' ? 'default' : 'outline'}
-              onClick={() => setFilter('')}
-            >
-              All Invoices
+            <Button variant={filter === '' ? 'default' : 'outline'} onClick={() => setFilter('')}>All Invoices</Button>
+            <Button variant={filter === 'pending' ? 'default' : 'outline'} onClick={() => setFilter('pending')}>
+              <Clock className="h-4 w-4 mr-2" />Pending
             </Button>
-            <Button 
-              variant={filter === 'pending' ? 'default' : 'outline'}
-              onClick={() => setFilter('pending')}
-            >
-              <Clock className="h-4 w-4 mr-2" />
-              Pending
-            </Button>
-            <Button 
-              variant={filter === 'paid' ? 'default' : 'outline'}
-              onClick={() => setFilter('paid')}
-            >
-              <CheckCircle className="h-4 w-4 mr-2" />
-              Paid
+            <Button variant={filter === 'paid' ? 'default' : 'outline'} onClick={() => setFilter('paid')}>
+              <CheckCircle className="h-4 w-4 mr-2" />Paid
             </Button>
           </div>
         )}
@@ -992,6 +989,11 @@ export default function Billing() {
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="pl-10"
               />
+              {isFetching && (
+                <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary"></div>
+                </div>
+              )}
             </div>
           </CardContent>
         </Card>
@@ -1004,19 +1006,17 @@ export default function Billing() {
                 <Receipt className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
                 <h3 className="text-lg font-medium mb-2">No invoices found</h3>
                 <p className="text-muted-foreground mb-4">
-                  {searchQuery 
+                  {searchQuery
                     ? `No invoices match "${searchQuery}"`
-                    : isCustomer 
+                    : isCustomer
                       ? "You don't have any invoices yet."
-                      : "No invoices match the current filter."
-                  }
+                      : "No invoices match the current filter."}
                 </p>
               </CardContent>
             </Card>
           ) : (
             displayInvoices?.map((invoice: Invoice) => {
               const isExpanded = expandedCards.includes(invoice.id);
-              
               return (
                 <Card key={invoice.id} className="hover:shadow-lg transition-shadow">
                   <CardHeader className="pb-3">
@@ -1034,18 +1034,16 @@ export default function Billing() {
                           </div>
                         </div>
                       </div>
-                      <div className="flex items-center gap-2">
-                        <Badge className={getPaymentStatusColor(invoice.paymentStatus)}>
-                          <div className="flex items-center gap-1">
-                            {getPaymentStatusIcon(invoice.paymentStatus)}
-                            {invoice.paymentStatus.charAt(0).toUpperCase() + invoice.paymentStatus.slice(1)}
-                          </div>
-                        </Badge>
-                      </div>
+                      <Badge className={getPaymentStatusColor(invoice.paymentStatus)}>
+                        <div className="flex items-center gap-1">
+                          {getPaymentStatusIcon(invoice.paymentStatus)}
+                          {invoice.paymentStatus.charAt(0).toUpperCase() + invoice.paymentStatus.slice(1)}
+                        </div>
+                      </Badge>
                     </div>
                   </CardHeader>
+
                   <CardContent className="space-y-4">
-                    {/* Collapsed View - Always Visible */}
                     <div className="flex items-center justify-between">
                       <div className="text-lg">
                         <span className="text-muted-foreground">Total: </span>
@@ -1059,41 +1057,19 @@ export default function Billing() {
                       )}
                     </div>
 
-                    {/* Expanded View - Conditional */}
                     {isExpanded && (
                       <div className="space-y-4 pt-4 border-t animate-in fade-in duration-200">
-                        {/* Guest Information */}
                         <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
                           <h4 className="font-semibold text-blue-700 mb-3 text-sm">Guest Information</h4>
                           <div className="space-y-2 text-sm">
-                            <div className="flex">
-                              <span className="font-medium text-gray-700 w-20">Name:</span>
-                              <span className="text-gray-900">{invoice.customerName}</span>
-                            </div>
-                            {invoice.customer2Name && (
-                              <div className="flex">
-                                <span className="font-medium text-gray-700 w-20">Guest 2:</span>
-                                <span className="text-gray-900">{invoice.customer2Name}</span>
-                              </div>
-                            )}
-                            <div className="flex">
-                              <span className="font-medium text-gray-700 w-20">Email:</span>
-                              <span className="text-gray-900 break-all">{invoice.customerEmail}</span>
-                            </div>
-                            <div className="flex">
-                              <span className="font-medium text-gray-700 w-20">Phone:</span>
-                              <span className="text-gray-900">{invoice.customerPhone}</span>
-                            </div>
-                            {invoice.customerGstNumber && (
-                              <div className="flex">
-                                <span className="font-medium text-gray-700 w-20">GST No:</span>
-                                <span className="text-gray-900 font-mono text-xs">{invoice.customerGstNumber}</span>
-                              </div>
-                            )}
+                            <div className="flex"><span className="font-medium text-gray-700 w-20">Name:</span><span className="text-gray-900">{invoice.customerName}</span></div>
+                            {invoice.customer2Name && <div className="flex"><span className="font-medium text-gray-700 w-20">Guest 2:</span><span className="text-gray-900">{invoice.customer2Name}</span></div>}
+                            <div className="flex"><span className="font-medium text-gray-700 w-20">Email:</span><span className="text-gray-900 break-all">{invoice.customerEmail}</span></div>
+                            <div className="flex"><span className="font-medium text-gray-700 w-20">Phone:</span><span className="text-gray-900">{invoice.customerPhone}</span></div>
+                            {invoice.customerGstNumber && <div className="flex"><span className="font-medium text-gray-700 w-20">GST No:</span><span className="text-gray-900 font-mono text-xs">{invoice.customerGstNumber}</span></div>}
                           </div>
                         </div>
 
-                        {/* Stay Details */}
                         <div className="bg-green-50 p-4 rounded-lg border border-green-200">
                           <h4 className="font-semibold text-green-700 mb-3 text-sm">Stay Details</h4>
                           <div className="space-y-2 text-sm">
@@ -1116,130 +1092,90 @@ export default function Billing() {
                           </div>
                         </div>
 
-                        {/* Charges Breakdown */}
                         <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
                           <h4 className="font-semibold text-gray-700 mb-3 text-sm">Charges Breakdown</h4>
                           <div className="space-y-2 text-sm">
                             <div className="flex justify-between">
                               <span className="text-gray-700">Room Charges ({invoice.days} night{invoice.days > 1 ? 's' : ''}):</span>
-                              <span className="font-medium text-gray-900">₹{invoice.roomCharges.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                              <span className="font-medium text-gray-900">₹{invoice.roomCharges.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
                             </div>
+                            {invoice.additionalCharges > 0 && (
+                              <div className="flex justify-between">
+                                <span className="text-gray-700">Additional Charges:</span>
+                                <span className="font-medium text-gray-900">₹{invoice.additionalCharges.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+                              </div>
+                            )}
                             <div className="flex justify-between">
-                              <span className="text-gray-700">Additional Charges:</span>
-                              <span className="font-medium text-gray-900">₹{invoice.additionalCharges.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                              <span className="text-gray-700">GST (5%):</span>
+                              <span className="font-medium text-gray-900">₹{(invoice.cgst + invoice.sgst).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
                             </div>
-                            <div className="flex justify-between text-xs">
-                              <span className="text-gray-600">CGST (2.5%):</span>
-                              <span className="text-gray-800">₹{invoice.cgst.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
-                            </div>
-                            <div className="flex justify-between text-xs">
-                              <span className="text-gray-600">SGST (2.5%):</span>
-                              <span className="text-gray-800">₹{invoice.sgst.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
-                            </div>
+                            {invoice.advanceAmount != null && invoice.advanceAmount > 0 && (
+                              <div className="flex justify-between">
+                                <span className="text-gray-700">Advance Paid{invoice.advancePaymentMethod ? ` (${invoice.advancePaymentMethod})` : ''}:</span>
+                                <span className="font-medium text-green-600">-₹{invoice.advanceAmount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+                              </div>
+                            )}
+                            {invoice.paymentStatus === 'paid' && invoice.paymentMethod && invoice.advanceAmount != null && invoice.advanceAmount > 0 && (
+                              <div className="flex justify-between">
+                                <span className="text-gray-700">Remaining Paid ({invoice.paymentMethod}):</span>
+                                <span className="font-medium text-green-600">-₹{(invoice.total - invoice.advanceAmount).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+                              </div>
+                            )}
                             <div className="border-t pt-2 mt-2 flex justify-between">
                               <span className="font-bold text-gray-900">Total Amount:</span>
-                              <span className="font-bold text-primary text-lg">₹{invoice.total.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                              <span className="font-bold text-primary text-lg">₹{invoice.total.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
                             </div>
-                            {invoice.advanceAmount > 0 && (
-                              <>
-                                <div className="flex justify-between">
-                                  <span className="text-gray-700">Advance Paid:</span>
-                                  <span className="font-medium text-green-600">-₹{invoice.advanceAmount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
-                                </div>
-                                {invoice.advancePaymentMethod && (
-                                  <div className="flex justify-between text-xs">
-                                    <span className="text-gray-600">Advance Method:</span>
-                                    <span className="text-gray-800 font-medium">{invoice.advancePaymentMethod}</span>
-                                  </div>
-                                )}
-                                <div className="border-t pt-2 mt-2 flex justify-between">
-                                  <span className="font-bold text-orange-600">Due Amount:</span>
-                                  <span className="font-bold text-orange-600 text-lg">₹{(invoice.total - invoice.advanceAmount).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
-                                </div>
-                              </>
-                            )}
                           </div>
                         </div>
 
-                        {/* Payment Info */}
-                        {invoice.paymentStatus === 'paid' && invoice.paymentMethod && (
-                          <div className="bg-green-50 p-3 rounded-lg border border-green-200">
-                            <div className="flex items-center justify-between">
-                              <span className="text-sm font-medium text-green-700">Payment Status:</span>
-                              <span className="text-sm font-semibold text-green-900">PAID via {invoice.paymentMethod}</span>
-                            </div>
+                        {invoice.paymentStatus === 'paid' && (
+                          <div className="bg-green-50 p-3 rounded-lg border border-green-200 space-y-1">
+                            {invoice.advancePaymentMethod && (
+                              <div className="flex items-center justify-between text-sm">
+                                <span className="text-gray-600">Initial Payment Mode:</span>
+                                <span className="font-medium text-gray-800">{invoice.advancePaymentMethod}</span>
+                              </div>
+                            )}
+                            {invoice.paymentMethod && (
+                              <div className="flex items-center justify-between text-sm">
+                                <span className="text-gray-600">Final Payment Mode:</span>
+                                <span className="font-medium text-gray-800">{invoice.paymentMethod}</span>
+                              </div>
+                            )}
+                            <p className="text-sm font-semibold text-green-700 pt-1">
+                              Fully Paid on {new Date(invoice.invoiceDate).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}
+                            </p>
                           </div>
                         )}
                       </div>
                     )}
 
-                    {/* Action Buttons */}
                     <div className="flex gap-2 pt-2 flex-wrap">
-                      <Button 
-                        variant="outline" 
-                        size="sm"
-                        onClick={() => toggleCard(invoice.id)}
-                      >
-                        {isExpanded ? (
-                          <>
-                            <ChevronUp className="h-4 w-4 mr-1" />
-                            Hide Details
-                          </>
-                        ) : (
-                          <>
-                            <ChevronDown className="h-4 w-4 mr-1" />
-                            Show Details
-                          </>
-                        )}
+                      <Button variant="outline" size="sm" onClick={() => toggleCard(invoice.id)}>
+                        {isExpanded ? <><ChevronUp className="h-4 w-4 mr-1" />Hide Details</> : <><ChevronDown className="h-4 w-4 mr-1" />Show Details</>}
                       </Button>
-                      <Button 
-                        variant="outline" 
-                        size="sm"
-                        onClick={() => setViewingInvoice(invoice)}
-                      >
-                        <Eye className="h-4 w-4 mr-1" />
-                        View Invoice
+                      <Button variant="outline" size="sm" onClick={() => setViewingInvoice(invoice)}>
+                        <Eye className="h-4 w-4 mr-1" />View Invoice
                       </Button>
-                      <Button 
-                        variant="outline" 
-                        size="sm"
-                        onClick={() => handleDownloadPdf(invoice)}
-                      >
-                        <Download className="h-4 w-4 mr-1" />
-                        Download PDF
+                      <Button variant="outline" size="sm" onClick={() => handleDownloadPdf(invoice)}>
+                        <Download className="h-4 w-4 mr-1" />Download PDF
                       </Button>
-                      <Button 
-                        variant="outline" 
-                        size="sm"
-                        onClick={() => handleShareWhatsApp(invoice)}
-                      >
-                        <MessageCircle className="h-4 w-4 mr-1" />
-                        Share
+                      <Button variant="outline" size="sm" onClick={() => handleShareWhatsApp(invoice)}>
+                        <MessageCircle className="h-4 w-4 mr-1" />Share
                       </Button>
                       {invoice.paymentStatus === 'pending' && !isCustomer && (
-                        <Button 
-                          size="sm" 
-                          className="bg-green-600 hover:bg-green-700"
-                          onClick={() => handleMarkAsPaid(invoice)}
-                        >
-                          <CreditCard className="h-4 w-4 mr-1" />
-                          Mark as Paid
+                        <Button size="sm" className="bg-green-600 hover:bg-green-700" onClick={() => setPaymentInvoice(invoice)}>
+                          <CreditCard className="h-4 w-4 mr-1" />Mark as Paid
                         </Button>
                       )}
                       {invoice.paymentStatus === 'partial' && !isCustomer && (
-                        <Button 
-                          size="sm" 
-                          className="bg-orange-600 hover:bg-orange-700"
-                          onClick={() => setPaymentInvoice(invoice)}
-                        >
-                          <CreditCard className="h-4 w-4 mr-1" />
-                          Mark as Paid
+                        <Button size="sm" className="bg-orange-600 hover:bg-orange-700" onClick={() => setPaymentInvoice(invoice)}>
+                          <CreditCard className="h-4 w-4 mr-1" />Mark as Paid
                         </Button>
                       )}
                       {invoice.paymentStatus === 'pending' && isCustomer && (
                         <Button size="sm" className="bg-blue-600 hover:bg-blue-700">
-                          <CreditCard className="h-4 w-4 mr-1" />
-                          Pay Now
+                          <CreditCard className="h-4 w-4 mr-1" />Pay Now
                         </Button>
                       )}
                     </div>

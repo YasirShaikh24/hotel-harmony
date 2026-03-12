@@ -1,5 +1,11 @@
 {
+<<<<<<< HEAD
   "version": "2.0.0",
   "buildTime": "2026-02-28T00:00:00Z",
   "hash": "v2-major-update"
+=======
+  "version": "1.0.0",
+  "buildTime": "2024-02-24T00:00:00Z",
+  "hash": "763b0cc"
+>>>>>>> parent of 7dd191c (completed)
 }

@@ -89,7 +89,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const signIn = async (email: string, password: string) => {
     setLoading(true);
-    
+
+    // quick offline check before attempting network call
+    if (typeof navigator !== 'undefined' && !navigator.onLine) {
+      setLoading(false);
+      return { error: new Error('No internet connection. Please check your network and try again.') };
+    }
+
     try {
       const { data, error } = await supabase.auth.signInWithPassword({
         email,
@@ -97,8 +103,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       });
 
       if (error) {
+        // normalize network/fetch failures to a friendlier message
+        let message = error.message || 'Login failed';
+        if (/fetch/i.test(message)) {
+          message = 'Network error: could not reach authentication server.';
+        }
         setLoading(false);
-        return { error };
+        return { error: new Error(message) };
       }
 
       if (data.user) {
@@ -107,9 +118,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       setLoading(false);
       return { error: null };
-    } catch (error) {
+    } catch (err) {
       setLoading(false);
-      return { error: error as Error };
+      const message = (err as Error).message.includes('fetch')
+        ? 'Network error: please check your connection.'
+        : (err as Error).message;
+      return { error: new Error(message) };
     }
   };
 

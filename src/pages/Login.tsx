@@ -19,11 +19,23 @@ export default function Login() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    // quick offline guard
+    if (typeof navigator !== 'undefined' && !navigator.onLine) {
+      toast({
+        title: 'No Internet Connection',
+        description: 'Please connect to the internet and try again.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
     setLoading(true);
 
     const { error } = await signIn(email, password);
 
     if (error) {
+      // if we normalized the message in the context, show that directly
       toast({
         title: 'Login Failed',
         description: error.message || 'Invalid credentials. Please try again.',

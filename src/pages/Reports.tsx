@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import {
   TrendingUp, TrendingDown, IndianRupee, Calendar,
-  Smartphone, Banknote, Receipt, Wallet
+  Smartphone, Banknote, Receipt, Wallet, CreditCard
 } from 'lucide-react';
 import { invoicesApi, expensesApi } from '@/services/api';
 import {
@@ -56,19 +56,22 @@ const normaliseMethod = (m?: string): string => {
   const l = m.toLowerCase().trim();
   if (l === 'gpay' || l === 'upi') return 'GPay';
   if (l === 'cash') return 'Cash';
+  if (l === 'mim') return 'MIM';
   return m;
 };
 
 const methodStyle = (method: string) => ({
-  iconBg:     method === 'GPay' ? 'bg-green-100'      : method === 'Cash' ? 'bg-orange-100'      : 'bg-gray-100',
-  iconText:   method === 'GPay' ? 'text-green-600'    : method === 'Cash' ? 'text-orange-600'    : 'text-gray-600',
-  leftBorder: method === 'GPay' ? 'border-l-green-400': method === 'Cash' ? 'border-l-orange-400': 'border-l-gray-400',
+  iconBg:     method === 'GPay' ? 'bg-green-100'      : method === 'Cash' ? 'bg-orange-100'      : method === 'MIM' ? 'bg-blue-100'      : 'bg-gray-100',
+  iconText:   method === 'GPay' ? 'text-green-600'    : method === 'Cash' ? 'text-orange-600'    : method === 'MIM' ? 'text-blue-600'    : 'text-gray-600',
+  leftBorder: method === 'GPay' ? 'border-l-green-400': method === 'Cash' ? 'border-l-orange-400': method === 'MIM' ? 'border-l-blue-400': 'border-l-gray-400',
   badgeCls:   method === 'GPay'
     ? 'border-green-400 text-green-700 bg-green-50'
     : method === 'Cash'
     ? 'border-orange-400 text-orange-700 bg-orange-50'
+    : method === 'MIM'
+    ? 'border-blue-400 text-blue-700 bg-blue-50'
     : 'border-gray-400 text-gray-700 bg-gray-50',
-  amountText: method === 'GPay' ? 'text-green-600' : method === 'Cash' ? 'text-orange-600' : 'text-gray-600',
+  amountText: method === 'GPay' ? 'text-green-600' : method === 'Cash' ? 'text-orange-600' : method === 'MIM' ? 'text-blue-600' : 'text-gray-600',
 });
 
 // ── component ──────────────────────────────────────────────────────────
@@ -176,6 +179,7 @@ export default function Reports() {
 
   const gpayIncome  = sumByMethod('GPay');
   const cashIncome  = sumByMethod('Cash');
+  const mimIncome   = sumByMethod('MIM');
   const totalIncome = incomeEntries.reduce((s, e) => s + e.amount, 0);
   const totalExpenses = filteredExpenses.reduce((s, e) => s + e.amount, 0);
   const netProfit   = totalIncome - totalExpenses;
@@ -190,6 +194,7 @@ export default function Reports() {
   const paymentMethodChartData = [
     { name: 'GPay', value: gpayIncome,  color: '#10b981' },
     { name: 'Cash', value: cashIncome,  color: '#f59e0b' },
+    { name: 'MIM',  value: mimIncome,   color: '#3b82f6' },
   ].filter(d => d.value > 0);
 
   const expensesByCategory = filteredExpenses.reduce((acc: Record<string, number>, e) => {
@@ -239,10 +244,7 @@ export default function Reports() {
             ))}
           </div>
         ) : (
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            {/* Total Revenue */}
-            
-
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
             {/* GPay */}
             <Card className="border-t-4 border-t-emerald-400">
               <CardContent className="p-5">
@@ -277,6 +279,25 @@ export default function Reports() {
                     </p>
                   </div>
                   <Banknote className="h-7 w-7 text-orange-500"/>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* MIM */}
+            <Card className="border-t-4 border-t-blue-400">
+              <CardContent className="p-5">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">MIM Income</p>
+                    <p className="text-2xl font-bold text-blue-600 mt-1">₹{mimIncome.toLocaleString()}</p>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      {incomeEntries.filter(e => e.paymentMethod === 'MIM').length} txns
+                      {incomeEntries.filter(e => e.paymentMethod === 'MIM' && e.isAdvance).length > 0 &&
+                        ` · ${incomeEntries.filter(e => e.paymentMethod === 'MIM' && e.isAdvance).length} advance`
+                      }
+                    </p>
+                  </div>
+                  <CreditCard className="h-7 w-7 text-blue-500"/>
                 </div>
               </CardContent>
             </Card>
@@ -391,8 +412,8 @@ export default function Reports() {
         {activeTab === 'income' && (
           <div className="space-y-6">
 
-            {/* GPay / Cash summary cards */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {/* GPay / Cash / MIM summary cards */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <Card className="border-l-4 border-l-green-500">
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2 text-base">
@@ -436,6 +457,28 @@ export default function Reports() {
                   </div>
                 </CardContent>
               </Card>
+
+              <Card className="border-l-4 border-l-blue-500">
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2 text-base">
+                    <CreditCard className="h-5 w-5 text-blue-600"/>MIM Income
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <p className="text-3xl font-bold text-blue-600">₹{mimIncome.toLocaleString()}</p>
+                  <div className="mt-2 flex gap-4 text-xs text-muted-foreground">
+                    <span>{incomeEntries.filter(e => e.paymentMethod === 'MIM').length} total transactions</span>
+                    <span>·</span>
+                    <span className="text-blue-600 font-medium">
+                      {incomeEntries.filter(e => e.paymentMethod === 'MIM' && e.isAdvance).length} advance
+                    </span>
+                    <span>·</span>
+                    <span className="text-purple-600 font-medium">
+                      {incomeEntries.filter(e => e.paymentMethod === 'MIM' && !e.isAdvance).length} final
+                    </span>
+                  </div>
+                </CardContent>
+              </Card>
             </div>
 
             {/* Transaction list */}
@@ -467,6 +510,8 @@ export default function Reports() {
                                   <div className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 ${s.iconBg}`}>
                                     {entry.paymentMethod === 'GPay'
                                       ? <Smartphone className={`h-5 w-5 ${s.iconText}`}/>
+                                      : entry.paymentMethod === 'MIM'
+                                      ? <CreditCard className={`h-5 w-5 ${s.iconText}`}/>
                                       : <Banknote   className={`h-5 w-5 ${s.iconText}`}/>
                                     }
                                   </div>
@@ -485,6 +530,8 @@ export default function Reports() {
                                         className={`text-xs font-semibold inline-flex items-center gap-1 ${s.badgeCls}`}>
                                         {entry.paymentMethod === 'GPay'
                                           ? <><Smartphone className="h-3 w-3"/>GPay</>
+                                          : entry.paymentMethod === 'MIM'
+                                          ? <><CreditCard className="h-3 w-3"/>MIM</>
                                           : <><Banknote   className="h-3 w-3"/>Cash</>
                                         }
                                       </Badge>

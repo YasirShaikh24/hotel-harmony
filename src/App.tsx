@@ -13,6 +13,7 @@ import Rooms from "./pages/Rooms";
 import Bookings from "./pages/Bookings";
 import Reports from "./pages/Reports";
 import Billing from "./pages/Billing";
+import DuplicateBilling from "./pages/DuplicateBilling";
 import Expenses from "./pages/Expenses";
 import Customers from "./pages/Customers";
 import NotFound from "./pages/NotFound";
@@ -109,6 +110,14 @@ const App = () => (
               element={
                 <ProtectedRoute>
                   <Billing />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/duplicate-billing"
+              element={
+                <ProtectedRoute allowedRoles={['admin', 'receptionist']}>
+                  <DuplicateBilling />
                 </ProtectedRoute>
               }
             />

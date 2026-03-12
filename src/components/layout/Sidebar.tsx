@@ -7,6 +7,7 @@ import {
   Users,
   CalendarCheck,
   Receipt,
+  FileText,
   TrendingUp,
   Wallet,
   ChevronLeft,
@@ -31,6 +32,7 @@ const navItems: NavItem[] = [
   { icon: CalendarCheck, label: 'Bookings', href: '/bookings', roles: ['admin', 'receptionist', 'customer'] },
   { icon: Users, label: 'Customers', href: '/customers', roles: ['admin', 'receptionist'] },
   { icon: Receipt, label: 'Billing', href: '/billing', roles: ['admin', 'receptionist', 'customer'] },
+  { icon: FileText, label: 'Duplicate Billing', href: '/duplicate-billing', roles: ['admin', 'receptionist'] },
   { icon: TrendingUp, label: 'Reports', href: '/reports', roles: ['admin'] },
   { icon: Wallet, label: 'Expenses', href: '/expenses', roles: ['admin'] },
 ];

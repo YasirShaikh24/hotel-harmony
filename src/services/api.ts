@@ -645,41 +645,62 @@ export const invoicesApi = {
     
     if (invoiceError) throw invoiceError;
 
-    // Update invoice
-    const updatePayload: any = {
-      payment_status: updateData.paymentStatus,
-      payment_method: updateData.paymentMethod,
-    };
-
     // Handle additional charges if provided
     if (updateData.additionalCharges !== undefined) {
-      updatePayload.additional_charges = updateData.additionalCharges;
+      const updatePayload: any = {
+        additional_charges: updateData.additionalCharges,
+      };
+      
       // Recalculate total without GST
       const newTotal = parseFloat(invoice.room_charges) + parseFloat(updateData.additionalCharges);
       updatePayload.total = newTotal;
       updatePayload.cgst = 0; // Remove GST
       updatePayload.sgst = 0; // Remove GST
+
+      const { error } = await supabase
+        .from('invoices')
+        .update(updatePayload)
+        .eq('id', id);
+      
+      if (error) throw error;
     }
 
-    // Handle partial payments
-    if (updateData.paymentAmount !== undefined) {
-      // Store the payment amount (this might need a new column in the database)
-      // For now, we'll track it in the payment_method field or create a new field
-      updatePayload.payment_notes = `Payment: ₹${updateData.paymentAmount}`;
+    // Handle payment recording - create a payment record instead of updating invoice directly
+    if (updateData.paymentAmount !== undefined && updateData.paymentAmount > 0) {
+      const { error: paymentError } = await supabase
+        .from('payments')
+        .insert({
+          invoice_id: id,
+          amount: updateData.paymentAmount,
+          payment_method: updateData.paymentMethod || 'Cash',
+          notes: updateData.notes || null,
+        });
+      
+      if (paymentError) throw paymentError;
+      
+      // The trigger will automatically update invoice.total_paid and invoice.payment_status
     }
 
-    const { data, error } = await supabase
+    // Get updated invoice data
+    const { data: updatedInvoice, error: fetchError } = await supabase
       .from('invoices')
-      .update(updatePayload)
+      .select(`
+        *,
+        booking:bookings(
+          id,
+          check_out,
+          room_id,
+          status
+        )
+      `)
       .eq('id', id)
-      .select()
       .single();
     
-    if (error) throw error;
+    if (fetchError) throw fetchError;
 
-    // If marking as paid, check if checkout date has passed
-    if (updateData.paymentStatus === 'paid' && invoice.booking) {
-      const checkoutDate = new Date(invoice.booking.check_out);
+    // If fully paid, check if checkout date has passed
+    if (updatedInvoice.payment_status === 'paid' && updatedInvoice.booking) {
+      const checkoutDate = new Date(updatedInvoice.booking.check_out);
       const today = new Date();
       today.setHours(0, 0, 0, 0);
       checkoutDate.setHours(0, 0, 0, 0);
@@ -690,17 +711,17 @@ export const invoicesApi = {
         await supabase
           .from('bookings')
           .update({ status: 'checked_out' })
-          .eq('id', invoice.booking.id);
+          .eq('id', updatedInvoice.booking.id);
 
         // Update room status to available
         await supabase
           .from('rooms')
           .update({ status: 'available' })
-          .eq('id', invoice.booking.room_id);
+          .eq('id', updatedInvoice.booking.room_id);
       }
     }
     
-    return data;
+    return updatedInvoice;
   },
   
   generatePdf: async (id: string) => {

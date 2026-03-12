@@ -13,6 +13,7 @@ import jsPDF from 'jspdf';
 import { format } from 'date-fns';
 
 interface DuplicateInvoiceForm {
+  customerId?: string;
   customerName: string;
   customer2Name?: string;
   customerEmail: string;
@@ -66,6 +67,7 @@ export default function DuplicateBilling() {
   }, []);
 
   const getInitialForm = (): DuplicateInvoiceForm => ({
+    customerId: '',
     customerName: '',
     customer2Name: '',
     customerEmail: '',
@@ -78,11 +80,11 @@ export default function DuplicateBilling() {
     checkInTime: '',
     checkOutTime: '',
     days: 1,
-    roomCharges: 0,
-    additionalCharges: 0,
-    cgst: 0,
-    sgst: 0,
-    advanceAmount: 0,
+    roomCharges: undefined,
+    additionalCharges: undefined,
+    cgst: undefined,
+    sgst: undefined,
+    advanceAmount: undefined,
     advancePaymentMethod: '',
     paymentMethod: '',
     invoiceDate: format(new Date(), 'yyyy-MM-dd'),
@@ -128,6 +130,7 @@ let roomData = null;
   setCurrentInvoice({
     ...currentInvoice,
 
+    customerId: customerId,
     customerName: selectedCustomer.name || "",
     customerEmail: selectedCustomer.email || "",
     customerPhone: selectedCustomer.phone || "",
@@ -175,15 +178,6 @@ let roomData = null;
       toast({
         title: 'Validation Error',
         description: 'Customer name is required',
-        variant: 'destructive',
-      });
-      return;
-    }
-
-    if (!currentInvoice.customerEmail.trim()) {
-      toast({
-        title: 'Validation Error',
-        description: 'Customer email is required',
         variant: 'destructive',
       });
       return;
@@ -253,9 +247,13 @@ let roomData = null;
   };
 
   const calculateTotal = (invoice: DuplicateInvoiceForm) => {
-    return invoice.roomCharges + invoice.additionalCharges + invoice.cgst + invoice.sgst - (invoice.advanceAmount || 0);
-  };
-
+  return (
+    (invoice.roomCharges || 0) +
+    (invoice.additionalCharges || 0) +
+    (invoice.cgst || 0) +
+    (invoice.sgst || 0)
+  );
+};
   // ─────────────────────────────────────────────
   // PDF DOWNLOAD — same format as Billing
   // ─────────────────────────────────────────────
@@ -310,13 +308,12 @@ let roomData = null;
       doc.setFont('helvetica', 'bold');
       doc.setFontSize(18);
       doc.setTextColor(...black);
-      doc.text('TAX INVOICE (DUPLICATE)', pageWidth - margin, y + 14, { align: 'right' });
+      doc.text('TAX INVOICE ', pageWidth - margin, y + 14, { align: 'right' });
 
       doc.setFont('helvetica', 'normal');
       doc.setFontSize(8.5);
       doc.setTextColor(...darkGray);
-      doc.text(`Invoice #: ${invoiceNumber}`, pageWidth - margin, y + 30, { align: 'right' });
-      doc.text(`Date: ${new Date(invoice.invoiceDate).toLocaleDateString('en-IN')}`, pageWidth - margin, y + 42, { align: 'right' });
+      doc.text(`Date: ${new Date(invoice.invoiceDate).toLocaleDateString('en-IN')}`, pageWidth - margin, y + 30, { align: 'right' });
 
       y += 62;
 
@@ -395,7 +392,7 @@ let roomData = null;
       doc.line(margin, y, pageWidth - margin, y);
 
       const addRow = (label: string, value: number, isGreen: boolean = false) => {
-        y += 8;
+        y += 18;
         doc.setFont('helvetica', 'normal');
         doc.setFontSize(9);
         doc.setTextColor(isGreen ? green[0] : black[0], isGreen ? green[1] : black[1], isGreen ? green[2] : black[2]);
@@ -412,7 +409,7 @@ let roomData = null;
       }
 
       // GST (5%)
-      addRow('GST (5%)', invoice.cgst + invoice.sgst);
+      addRow('GST (5%)', (invoice.cgst || 0) + (invoice.sgst || 0));
 
       // Advance Paid — green
       if (invoice.advanceAmount && invoice.advanceAmount > 0) {
@@ -428,7 +425,7 @@ let roomData = null;
       doc.setDrawColor(...lineGray);
       doc.setLineWidth(0.7);
       doc.line(margin, y + 3, pageWidth - margin, y + 3);
-      y += 12;
+      y += 20;
 
       doc.setFont('helvetica', 'bold');
       doc.setFontSize(12);
@@ -465,10 +462,6 @@ let roomData = null;
       doc.setFontSize(8);
       doc.setTextColor(...lightGray);
       doc.text('Thank you for staying with Hotel Krishna.', pageWidth / 2, pageHeight - 26, { align: 'center' });
-      doc.setFontSize(7);
-      doc.setTextColor(200, 100, 100);
-      doc.text('[DUPLICATE BILLING - FOR REFERENCE ONLY]', pageWidth / 2, pageHeight - 14, { align: 'center' });
-
       doc.save(`${invoiceNumber}.pdf`);
     };
 
@@ -593,7 +586,7 @@ let roomData = null;
                             )}
                             <div className="flex justify-between">
                               <span className="text-gray-700">GST (5%):</span>
-                              <span className="font-medium text-gray-900">₹{(invoice.cgst + invoice.sgst).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+                              <span className="font-medium text-gray-900">₹{((invoice.cgst || 0) + (invoice.sgst || 0)).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
                             </div>
                             {invoice.advanceAmount && invoice.advanceAmount > 0 && (
                               <div className="flex justify-between">
@@ -668,20 +661,31 @@ let roomData = null;
                 <h3 className="font-semibold text-blue-700">Guest Information</h3>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="space-y-2">
-                    <Label className="text-sm font-medium">Customer Name *</Label>
-                    <select
-  value={currentInvoice.customerName}
-  onChange={(e) => handleCustomerSelect(e.target.value)}
-  className="w-full border rounded-md p-2"
->
-  <option value="">Select Customer</option>
+                    <Label className="text-sm font-medium">Select Customer</Label>
 
-  {customers.map((customer) => (
-    <option key={customer.id} value={customer.id}>
-      {customer.name} ({customer.phone})
-    </option>
-  ))}
-</select>
+                    <select
+                      value={currentInvoice.customerId || ""}
+                      onChange={(e) => handleCustomerSelect(e.target.value)}
+                      className="w-full border rounded-md p-2"
+                    >
+                      <option value="">Select Customer</option>
+
+                      {customers.map((customer) => (
+                        <option key={customer.id} value={customer.id}>
+                          {customer.name} ({customer.phone})
+                        </option>
+                      ))}
+                    </select>
+
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-sm font-medium">Customer Name *</Label>
+
+                    <Input
+                      value={currentInvoice.customerName}
+                      onChange={(e) => handleInputChange("customerName", e.target.value)}
+                      placeholder="Enter customer name"
+                    />
                   </div>
                   <div className="space-y-2">
                     <Label className="text-sm font-medium">Second Guest Name (Optional)</Label>

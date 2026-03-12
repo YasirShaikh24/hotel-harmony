@@ -11,7 +11,7 @@ import { Calendar } from '@/components/ui/calendar';
 import { Label } from '@/components/ui/label';
 import { Receipt, Download, Eye, CreditCard, Clock, CheckCircle, MessageCircle, CalendarIcon, ChevronDown, ChevronUp, Search } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
-import { invoicesApi } from '@/services/api';
+import { invoicesApi, paymentsApi } from '@/services/api';
 import { useToast } from '@/hooks/use-toast';
 import jsPDF from 'jspdf';
 import { format } from 'date-fns';
@@ -28,18 +28,30 @@ interface Invoice {
   roomType: string;
   checkIn: string;
   checkOut: string;
+  checkInTime?: string;
+  checkOutTime?: string;
   days: number;
   roomCharges: number;
   additionalCharges: number;
   cgst: number;
   sgst: number;
   total: number;
+  totalPaid: number; // New field for total amount paid
   advanceAmount?: number;
   advancePaymentMethod?: string;
   paymentStatus: string;
   paymentMethod?: string;
   invoiceDate: string;
   createdAt?: string;
+  payments?: Payment[]; // New field for payment history
+}
+
+interface Payment {
+  id: string;
+  amount: number;
+  paymentMethod: string;
+  paymentDate: string;
+  notes?: string;
 }
 
 interface ViewInvoiceModalProps {
@@ -191,10 +203,10 @@ function ViewInvoiceModal({ invoice, isOpen, onClose, allInvoices }: ViewInvoice
 
               <p>Room: {invoice.roomNumber}</p>
               <p>
-                Check-in: {new Date(invoice.checkIn).toLocaleDateString("en-IN")}
+                Check-in: {new Date(invoice.checkIn).toLocaleDateString("en-IN")}{invoice.checkInTime && ` at ${invoice.checkInTime}`}
               </p>
               <p>
-                Check-out: {new Date(invoice.checkOut).toLocaleDateString("en-IN")}
+                Check-out: {new Date(invoice.checkOut).toLocaleDateString("en-IN")}{invoice.checkOutTime && ` at ${invoice.checkOutTime}`}
               </p>
               <p>Duration: {invoice.days} Night(s)</p>
             </div>
@@ -228,17 +240,10 @@ function ViewInvoiceModal({ invoice, isOpen, onClose, allInvoices }: ViewInvoice
                 </tr>
               )}
 
-              <tr>
-                <td className="py-3">GST (5%)</td>
-                <td className="py-3 text-right">
-                  {(invoice.cgst + invoice.sgst).toLocaleString("en-IN", { minimumFractionDigits: 2 })}
-                </td>
-              </tr>
-
               <tr className="border-t border-gray-400 font-semibold">
                 <td className="py-4 text-base">Total Amount</td>
                 <td className="py-4 text-right text-base">
-                  {invoice.total.toLocaleString("en-IN", { minimumFractionDigits: 2 })}
+                  {(invoice.roomCharges + invoice.additionalCharges).toLocaleString("en-IN", { minimumFractionDigits: 2 })}
                 </td>
               </tr>
 
@@ -253,7 +258,7 @@ function ViewInvoiceModal({ invoice, isOpen, onClose, allInvoices }: ViewInvoice
                   <tr className="font-semibold">
                     <td className="py-3">Due Amount</td>
                     <td className="py-3 text-right">
-                      {(invoice.total - invoice.advanceAmount).toLocaleString("en-IN", { minimumFractionDigits: 2 })}
+                      {((invoice.roomCharges + invoice.additionalCharges) - invoice.advanceAmount).toLocaleString("en-IN", { minimumFractionDigits: 2 })}
                     </td>
                   </tr>
                 </>
@@ -278,13 +283,26 @@ function ViewInvoiceModal({ invoice, isOpen, onClose, allInvoices }: ViewInvoice
   );
 }
 function PaymentModal({ invoice, isOpen, onClose }: PaymentModalProps) {
-  const [paymentMethod, setPaymentMethod] = useState<'Cash' | 'GPay'>('Cash');
+  const [paymentMethod, setPaymentMethod] = useState<'Cash' | 'GPay' | 'MIM'>('Cash');
+  const [paymentAmount, setPaymentAmount] = useState(0);
+  
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
-  const updatePaymentMutation = useMutation({
-    mutationFn: ({ id, status, method }: { id: string; status: string; method: string }) => 
-      invoicesApi.update(id, { paymentStatus: status, paymentMethod: method }),
+  // Calculate amounts without GST
+  const totalAmount = invoice ? (invoice.roomCharges + (invoice.additionalCharges || 0)) : 0;
+  const totalPaid = invoice?.totalPaid || 0;
+  const remainingAmount = totalAmount - totalPaid;
+
+  React.useEffect(() => {
+    if (invoice) {
+      setPaymentAmount(remainingAmount > 0 ? Math.min(remainingAmount, 1000) : 0);
+    }
+  }, [invoice, remainingAmount]);
+
+  const addPaymentMutation = useMutation({
+    mutationFn: ({ invoiceId, amount, method }: { invoiceId: string; amount: number; method: string }) => 
+      paymentsApi.create({ invoiceId, amount, paymentMethod: method }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['invoices'] });
       toast({
@@ -304,125 +322,220 @@ function PaymentModal({ invoice, isOpen, onClose }: PaymentModalProps) {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (invoice) {
-      updatePaymentMutation.mutate({ 
-        id: invoice.id, 
-        status: 'paid', 
-        method: paymentMethod 
+    
+    if (!invoice) return;
+
+    // Validate payment amount
+    if (paymentAmount <= 0) {
+      toast({
+        title: 'Invalid Amount',
+        description: 'Payment amount must be greater than 0',
+        variant: 'destructive',
       });
+      return;
     }
+
+    if (paymentAmount > remainingAmount) {
+      toast({
+        title: 'Invalid Amount',
+        description: `Payment amount cannot exceed remaining amount (₹${remainingAmount})`,
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    addPaymentMutation.mutate({ 
+      invoiceId: invoice.id, 
+      amount: paymentAmount,
+      method: paymentMethod
+    });
   };
 
   if (!invoice) return null;
 
-  const dueAmount = invoice.total - (invoice.advanceAmount || 0);
-  const amountToPay = invoice.paymentStatus === 'partial' ? dueAmount : invoice.total;
+  const paymentHistory = invoice.payments || [];
+  const canMarkAsPaid = remainingAmount <= 0;
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>Record Payment</DialogTitle>
+          <DialogTitle>Payment Management</DialogTitle>
         </DialogHeader>
-        <form onSubmit={handleSubmit} className="space-y-6">
-          <div className="space-y-4">
-            <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
-              <div className="flex justify-between items-center">
-                <span className="text-sm font-medium text-gray-700">Total Amount:</span>
-                <span className="text-lg font-bold text-blue-600">
-                  ₹{invoice.total.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+        
+        <div className="space-y-4">
+          {/* Amount Summary */}
+          <div className="bg-blue-50 p-3 rounded-lg border border-blue-200">
+            <div className="flex justify-between items-center text-sm">
+              <span className="font-medium text-gray-700">Total Amount:</span>
+              <span className="font-bold text-blue-600">
+                ₹{totalAmount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+              </span>
+            </div>
+            <div className="flex justify-between items-center text-sm mt-1">
+              <span className="text-gray-600">Total Paid:</span>
+              <span className="text-green-600 font-medium">
+                ₹{totalPaid.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+              </span>
+            </div>
+            <div className="border-t pt-2 mt-2 flex justify-between items-center">
+              <span className="text-sm font-bold text-gray-900">Remaining:</span>
+              <span className={`text-lg font-bold ${remainingAmount > 0 ? 'text-orange-600' : 'text-green-600'}`}>
+                ₹{remainingAmount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+              </span>
+            </div>
+            {canMarkAsPaid && (
+              <div className="mt-2 text-center">
+                <span className="text-sm font-bold text-green-600 bg-green-100 px-2 py-1 rounded">
+                  ✓ FULLY PAID
                 </span>
               </div>
-              {invoice.advanceAmount > 0 && (
-                <div className="flex justify-between items-center mt-2">
-                  <span className="text-sm font-medium text-gray-700">
-                    {invoice.paymentStatus === 'partial' ? 'Advance Paid:' : 'Previous Payment:'}
-                  </span>
-                  <span className="text-sm font-medium text-green-600">
-                    -₹{invoice.advanceAmount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                  </span>
+            )}
+          </div>
+
+          {/* Payment History */}
+          {paymentHistory.length > 0 && (
+            <div className="space-y-2">
+              <h4 className="text-sm font-semibold text-gray-900">Payment History</h4>
+              <div className="max-h-32 overflow-y-auto space-y-1">
+                {paymentHistory.map((payment, index) => (
+                  <div key={payment.id} className="flex justify-between items-center p-2 bg-gray-50 rounded text-sm">
+                    <div>
+                      <span className="font-medium">Payment #{index + 1}</span>
+                      <span className="text-gray-600 ml-2">via {payment.paymentMethod}</span>
+                    </div>
+                    <div className="text-right">
+                      <div className="font-bold text-green-600">
+                        ₹{payment.amount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                      </div>
+                      <div className="text-xs text-gray-500">
+                        {new Date(payment.paymentDate).toLocaleDateString('en-IN')}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Add New Payment Form */}
+          {remainingAmount > 0 && (
+            <form onSubmit={handleSubmit} className="space-y-3 border-t pt-4">
+              <h4 className="text-sm font-semibold text-gray-900">Add New Payment</h4>
+              
+              {/* Payment Amount Input */}
+              <div className="space-y-2">
+                <Label htmlFor="paymentAmount" className="text-sm">Payment Amount (₹)</Label>
+                <Input
+                  id="paymentAmount"
+                  type="number"
+                  min="0"
+                  max={remainingAmount}
+                  step="0.01"
+                  value={paymentAmount || ''}
+                  onChange={(e) => setPaymentAmount(parseFloat(e.target.value) || 0)}
+                  placeholder="Enter amount"
+                  required
+                  className="text-base"
+                />
+                <p className="text-xs text-muted-foreground">
+                  Max: ₹{remainingAmount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                </p>
+              </div>
+
+              {/* Payment Methods */}
+              <div className="space-y-2">
+                <Label className="text-sm font-semibold">Payment Method</Label>
+                <div className="grid grid-cols-3 gap-2">
+                  <label className={`flex flex-col items-center p-2 border-2 rounded-lg cursor-pointer transition-all ${
+                    paymentMethod === 'Cash' ? 'border-blue-500 bg-blue-50' : 'border-gray-200'
+                  }`}>
+                    <input
+                      type="radio"
+                      name="paymentMethod"
+                      value="Cash"
+                      checked={paymentMethod === 'Cash'}
+                      onChange={(e) => setPaymentMethod(e.target.value as 'Cash' | 'GPay' | 'MIM')}
+                      className="sr-only"
+                    />
+                    <span className="text-lg mb-1">💵</span>
+                    <span className="text-xs font-medium">Cash</span>
+                  </label>
+
+                  <label className={`flex flex-col items-center p-2 border-2 rounded-lg cursor-pointer transition-all ${
+                    paymentMethod === 'GPay' ? 'border-blue-500 bg-blue-50' : 'border-gray-200'
+                  }`}>
+                    <input
+                      type="radio"
+                      name="paymentMethod"
+                      value="GPay"
+                      checked={paymentMethod === 'GPay'}
+                      onChange={(e) => setPaymentMethod(e.target.value as 'Cash' | 'GPay' | 'MIM')}
+                      className="sr-only"
+                    />
+                    <span className="text-lg mb-1">📱</span>
+                    <span className="text-xs font-medium">GPay</span>
+                  </label>
+
+                  <label className={`flex flex-col items-center p-2 border-2 rounded-lg cursor-pointer transition-all ${
+                    paymentMethod === 'MIM' ? 'border-blue-500 bg-blue-50' : 'border-gray-200'
+                  }`}>
+                    <input
+                      type="radio"
+                      name="paymentMethod"
+                      value="MIM"
+                      checked={paymentMethod === 'MIM'}
+                      onChange={(e) => setPaymentMethod(e.target.value as 'Cash' | 'GPay' | 'MIM')}
+                      className="sr-only"
+                    />
+                    <span className="text-lg mb-1">💳</span>
+                    <span className="text-xs font-medium">MIM</span>
+                  </label>
+                </div>
+              </div>
+
+              {/* Payment Preview */}
+              {paymentAmount > 0 && (
+                <div className="bg-gray-50 p-2 rounded text-center">
+                  <p className="text-sm font-medium">
+                    {paymentAmount >= remainingAmount ? (
+                      <span className="text-green-600">✓ This will complete the payment</span>
+                    ) : (
+                      <span className="text-orange-600">⚠ Partial payment of ₹{paymentAmount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+                    )}
+                  </p>
+                  {paymentAmount < remainingAmount && (
+                    <p className="text-xs text-gray-600 mt-1">
+                      Remaining after: ₹{(remainingAmount - paymentAmount).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                    </p>
+                  )}
                 </div>
               )}
-              <div className="border-t pt-2 mt-2 flex justify-between items-center">
-                <span className="text-sm font-bold text-gray-900">
-                  {invoice.paymentStatus === 'partial' ? 'Amount to Pay:' : 'Total Amount:'}
-                </span>
-                <span className="text-xl font-bold text-orange-600">
-                  ₹{amountToPay.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                </span>
+
+              <div className="flex gap-2">
+                <Button 
+                  type="submit" 
+                  disabled={addPaymentMutation.isPending || paymentAmount <= 0} 
+                  className="flex-1 bg-green-600 hover:bg-green-700 text-sm"
+                >
+                  {addPaymentMutation.isPending ? 'Recording...' : 'Add Payment'}
+                </Button>
+                <Button type="button" variant="outline" onClick={onClose} className="text-sm">
+                  Cancel
+                </Button>
               </div>
-              <div className="mt-2 text-xs text-gray-600">
-                Invoice: {invoice.id} | Room {invoice.roomNumber}
-              </div>
+            </form>
+          )}
+
+          {/* If fully paid, just show close button */}
+          {remainingAmount <= 0 && (
+            <div className="flex justify-center pt-2">
+              <Button onClick={onClose} className="bg-green-600 hover:bg-green-700">
+                Close
+              </Button>
             </div>
-
-            <div className="space-y-3">
-              <Label className="text-base font-semibold">Select Payment Method</Label>
-              <div className="space-y-3">
-                <label className="flex items-center p-4 border-2 rounded-lg cursor-pointer transition-all hover:bg-gray-50"
-                  style={{
-                    borderColor: paymentMethod === 'Cash' ? '#2563eb' : '#e5e7eb',
-                    backgroundColor: paymentMethod === 'Cash' ? '#eff6ff' : 'white'
-                  }}>
-                  <input
-                    type="radio"
-                    name="paymentMethod"
-                    value="Cash"
-                    checked={paymentMethod === 'Cash'}
-                    onChange={(e) => setPaymentMethod(e.target.value as 'Cash' | 'GPay')}
-                    className="w-5 h-5 text-blue-600"
-                  />
-                  <div className="ml-3 flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-full bg-green-100 flex items-center justify-center">
-                      <span className="text-xl">💵</span>
-                    </div>
-                    <div>
-                      <span className="font-semibold text-gray-900">Cash Payment</span>
-                      <p className="text-xs text-gray-600">Physical currency payment</p>
-                    </div>
-                  </div>
-                </label>
-
-                <label className="flex items-center p-4 border-2 rounded-lg cursor-pointer transition-all hover:bg-gray-50"
-                  style={{
-                    borderColor: paymentMethod === 'GPay' ? '#2563eb' : '#e5e7eb',
-                    backgroundColor: paymentMethod === 'GPay' ? '#eff6ff' : 'white'
-                  }}>
-                  <input
-                    type="radio"
-                    name="paymentMethod"
-                    value="GPay"
-                    checked={paymentMethod === 'GPay'}
-                    onChange={(e) => setPaymentMethod(e.target.value as 'Cash' | 'GPay')}
-                    className="w-5 h-5 text-blue-600"
-                  />
-                  <div className="ml-3 flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center">
-                      <span className="text-xl">📱</span>
-                    </div>
-                    <div>
-                      <span className="font-semibold text-gray-900">GPay / UPI</span>
-                      <p className="text-xs text-gray-600">Digital payment via UPI</p>
-                    </div>
-                  </div>
-                </label>
-              </div>
-            </div>
-          </div>
-
-          <div className="flex gap-2 pt-4">
-            <Button 
-              type="submit" 
-              disabled={updatePaymentMutation.isPending} 
-              className="flex-1 bg-green-600 hover:bg-green-700"
-            >
-              {updatePaymentMutation.isPending ? 'Recording...' : 'Confirm Payment'}
-            </Button>
-            <Button type="button" variant="outline" onClick={onClose}>
-              Cancel
-            </Button>
-          </div>
-        </form>
+          )}
+        </div>
       </DialogContent>
     </Dialog>
   );
@@ -566,12 +679,12 @@ export default function Billing() {
   doc.setFont('helvetica', 'normal');
   doc.text(`Room: ${invoice.roomNumber}`, 120, y - 4);
   doc.text(
-    `Check-in: ${new Date(invoice.checkIn).toLocaleDateString('en-IN')}`,
+    `Check-in: ${new Date(invoice.checkIn).toLocaleDateString('en-IN')}${invoice.checkInTime ? ` at ${invoice.checkInTime}` : ''}`,
     120,
     y + 1
   );
   doc.text(
-    `Check-out: ${new Date(invoice.checkOut).toLocaleDateString('en-IN')}`,
+    `Check-out: ${new Date(invoice.checkOut).toLocaleDateString('en-IN')}${invoice.checkOutTime ? ` at ${invoice.checkOutTime}` : ''}`,
     120,
     y + 6
   );
@@ -599,7 +712,6 @@ export default function Billing() {
   if (invoice.additionalCharges > 0) {
     addRow('Additional Charges', invoice.additionalCharges);
   }
-  addRow('GST (5%)', invoice.cgst + invoice.sgst);
 
   y += 10;
   doc.line(120, y, 190, y);
@@ -677,19 +789,17 @@ export default function Billing() {
         gstInfo +
         `\n*BOOKING DETAILS*\n` +
         `Room: ${invoice.roomNumber} - ${invoice.roomType}\n` +
-        `Check-in: ${new Date(invoice.checkIn).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}\n` +
-        `Check-out: ${new Date(invoice.checkOut).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}\n` +
+        `Check-in: ${new Date(invoice.checkIn).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}${invoice.checkInTime ? ` at ${invoice.checkInTime}` : ''}\n` +
+        `Check-out: ${new Date(invoice.checkOut).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}${invoice.checkOutTime ? ` at ${invoice.checkOutTime}` : ''}\n` +
         `Duration: ${invoice.days} night${invoice.days > 1 ? 's' : ''}\n\n` +
         `━━━━━━━━━━━━━━━━━━━━\n` +
         `*CHARGES BREAKDOWN*\n` +
         `Room Charges: ₹${invoice.roomCharges.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}\n` +
         `Additional: ₹${invoice.additionalCharges.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}\n` +
         (invoice.advanceAmount > 0 ? `Advance Paid${invoice.advancePaymentMethod ? ` (${invoice.advancePaymentMethod})` : ''}: ₹${invoice.advanceAmount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}\n` : '') +
-        `CGST (2.5%): ₹${invoice.cgst.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}\n` +
-        `SGST (2.5%): ₹${invoice.sgst.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}\n\n` +
         `━━━━━━━━━━━━━━━━━━━━\n` +
-        `*TOTAL AMOUNT: ₹${invoice.total.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}*\n` +
-        (invoice.advanceAmount > 0 ? `*Due Amount: ₹${(invoice.total - invoice.advanceAmount).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}*\n` : '') +
+        `*TOTAL AMOUNT: ₹${(invoice.roomCharges + invoice.additionalCharges).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}*\n` +
+        (invoice.advanceAmount > 0 ? `*Due Amount: ₹${((invoice.roomCharges + invoice.additionalCharges) - invoice.advanceAmount).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}*\n` : '') +
         `Payment Status: ${invoice.paymentStatus.toUpperCase()}${invoice.paymentStatus === 'paid' && invoice.paymentMethod ? ` via ${invoice.paymentMethod}` : invoice.paymentStatus === 'partial' && invoice.advancePaymentMethod ? ` (Advance via ${invoice.advancePaymentMethod})` : ''}\n\n` +
         `Thank you for choosing Hotel Krishna! 🙏`;
       
@@ -993,11 +1103,11 @@ export default function Billing() {
                             </div>
                             <div className="flex">
                               <span className="font-medium text-gray-700 w-24">Check-in:</span>
-                              <span className="text-gray-900">{new Date(invoice.checkIn).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}</span>
+                              <span className="text-gray-900">{new Date(invoice.checkIn).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}{invoice.checkInTime && ` at ${invoice.checkInTime}`}</span>
                             </div>
                             <div className="flex">
                               <span className="font-medium text-gray-700 w-24">Check-out:</span>
-                              <span className="text-gray-900">{new Date(invoice.checkOut).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}</span>
+                              <span className="text-gray-900">{new Date(invoice.checkOut).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}{invoice.checkOutTime && ` at ${invoice.checkOutTime}`}</span>
                             </div>
                             <div className="flex">
                               <span className="font-medium text-gray-700 w-24">Duration:</span>

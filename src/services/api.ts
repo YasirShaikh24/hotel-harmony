@@ -196,6 +196,8 @@ export const bookingsApi = {
         room_id,
         check_in,
         check_out,
+        check_in_time,
+        check_out_time,
         status,
         adults,
         children,
@@ -235,6 +237,8 @@ export const bookingsApi = {
       roomType: typeMap[booking.room?.type] || booking.room?.type,
       checkIn: booking.check_in,
       checkOut: booking.check_out,
+      checkInTime: booking.check_in_time,
+      checkOutTime: booking.check_out_time,
       status: booking.status,
       adults: booking.adults,
       children: booking.children,
@@ -342,6 +346,8 @@ export const bookingsApi = {
       room_id: room.id,
       check_in: bookingData.checkIn,
       check_out: bookingData.checkOut,
+      check_in_time: bookingData.checkInTime || '2:00 PM',
+      check_out_time: bookingData.checkOutTime || '11:00 AM',
       status: 'confirmed',
       adults: bookingData.adults || 1,
       children: bookingData.children || 0,
@@ -358,7 +364,7 @@ export const bookingsApi = {
 
     if (bookingError) throw bookingError;
 
-    // 5️⃣ Create Invoice
+    // 5️⃣ Create Invoice (NO GST)
     const days = Math.ceil(
       (new Date(bookingData.checkOut).getTime() -
        new Date(bookingData.checkIn).getTime()) /
@@ -366,16 +372,14 @@ export const bookingsApi = {
     );
 
     const roomCharges = room.price * days;
-    const cgst = roomCharges * 0.025;
-    const sgst = roomCharges * 0.025;
-    const total = roomCharges + cgst + sgst;
+    const total = roomCharges; // No GST added
 
     await supabase.from('invoices').insert({
       booking_id: booking.id,
       room_charges: roomCharges,
       additional_charges: 0,
-      cgst,
-      sgst,
+      cgst: 0, // No GST
+      sgst: 0, // No GST
       total,
       payment_status: bookingData.advanceAmount > 0 ? 'partial' : 'pending',
       payment_method: bookingData.advancePaymentMethod || null,
@@ -398,6 +402,8 @@ export const bookingsApi = {
     const updatePayload = {
       check_in: updateData.checkIn,
       check_out: updateData.checkOut,
+      check_in_time: updateData.checkInTime || '2:00 PM',
+      check_out_time: updateData.checkOutTime || '11:00 AM',
       status: updateData.status,
       adults: updateData.adults,
       children: updateData.children,
@@ -443,6 +449,7 @@ export const invoicesApi = {
         cgst,
         sgst,
         total,
+        total_paid,
         payment_status,
         payment_method,
         created_at,
@@ -452,10 +459,19 @@ export const invoicesApi = {
           room_id,
           check_in,
           check_out,
+          check_in_time,
+          check_out_time,
           advance_amount,
           advance_payment_method,
           customer:customers(id, name, email, mobile),
           room:rooms(*)
+        ),
+        payments:payments(
+          id,
+          amount,
+          payment_method,
+          payment_date,
+          notes
         )
       `)
       .order('created_at', { ascending: false });
@@ -487,18 +503,28 @@ export const invoicesApi = {
       roomType: typeMap[invoice.booking?.room?.type] || invoice.booking?.room?.type,
       checkIn: invoice.booking?.check_in,
       checkOut: invoice.booking?.check_out,
+      checkInTime: invoice.booking?.check_in_time,
+      checkOutTime: invoice.booking?.check_out_time,
       days: Math.ceil((new Date(invoice.booking?.check_out).getTime() - new Date(invoice.booking?.check_in).getTime()) / (1000 * 60 * 60 * 24)),
       roomCharges: parseFloat(invoice.room_charges),
       additionalCharges: parseFloat(invoice.additional_charges || 0),
       cgst: parseFloat(invoice.cgst),
       sgst: parseFloat(invoice.sgst),
       total: parseFloat(invoice.total),
+      totalPaid: parseFloat(invoice.total_paid || 0),
       advanceAmount: parseFloat(invoice.booking?.advance_amount || 0),
       advancePaymentMethod: invoice.booking?.advance_payment_method,
       paymentStatus: invoice.payment_status,
       paymentMethod: invoice.payment_method,
       invoiceDate: invoice.created_at.split('T')[0],
       createdAt: invoice.created_at,
+      payments: invoice.payments?.map((payment: any) => ({
+        id: payment.id,
+        amount: parseFloat(payment.amount),
+        paymentMethod: payment.payment_method,
+        paymentDate: payment.payment_date,
+        notes: payment.notes,
+      })) || [],
     }));
   },
   
@@ -553,6 +579,8 @@ export const invoicesApi = {
       roomType: typeMap[data.booking?.room?.type] || data.booking?.room?.type,
       checkIn: data.booking?.check_in,
       checkOut: data.booking?.check_out,
+      checkInTime: data.booking?.check_in_time,
+      checkOutTime: data.booking?.check_out_time,
       days: Math.ceil((new Date(data.booking?.check_out).getTime() - new Date(data.booking?.check_in).getTime()) / (1000 * 60 * 60 * 24)),
       roomCharges: parseFloat(data.room_charges),
       additionalCharges: parseFloat(data.additional_charges || 0),
@@ -587,13 +615,31 @@ export const invoicesApi = {
     if (invoiceError) throw invoiceError;
 
     // Update invoice
+    const updatePayload: any = {
+      payment_status: updateData.paymentStatus,
+      payment_method: updateData.paymentMethod,
+    };
+
+    // Handle additional charges if provided
+    if (updateData.additionalCharges !== undefined) {
+      updatePayload.additional_charges = updateData.additionalCharges;
+      // Recalculate total without GST
+      const newTotal = parseFloat(invoice.room_charges) + parseFloat(updateData.additionalCharges);
+      updatePayload.total = newTotal;
+      updatePayload.cgst = 0; // Remove GST
+      updatePayload.sgst = 0; // Remove GST
+    }
+
+    // Handle partial payments
+    if (updateData.paymentAmount !== undefined) {
+      // Store the payment amount (this might need a new column in the database)
+      // For now, we'll track it in the payment_method field or create a new field
+      updatePayload.payment_notes = `Payment: ₹${updateData.paymentAmount}`;
+    }
+
     const { data, error } = await supabase
       .from('invoices')
-      .update({
-        payment_status: updateData.paymentStatus,
-        payment_method: updateData.paymentMethod,
-        additional_charges: updateData.additionalCharges,
-      })
+      .update(updatePayload)
       .eq('id', id)
       .select()
       .single();
@@ -825,6 +871,43 @@ export const financialApi = {
   },
 };
 
+// Payments API
+export const paymentsApi = {
+  getByInvoiceId: async (invoiceId: string) => {
+    const { data, error } = await supabase
+      .from('payments')
+      .select('*')
+      .eq('invoice_id', invoiceId)
+      .order('created_at', { ascending: true });
+    
+    if (error) throw error;
+    
+    return data.map(payment => ({
+      id: payment.id,
+      amount: parseFloat(payment.amount),
+      paymentMethod: payment.payment_method,
+      paymentDate: payment.payment_date,
+      notes: payment.notes,
+    }));
+  },
+  
+  create: async (paymentData: any) => {
+    const { data, error } = await supabase
+      .from('payments')
+      .insert({
+        invoice_id: paymentData.invoiceId,
+        amount: paymentData.amount,
+        payment_method: paymentData.paymentMethod,
+        notes: paymentData.notes || null,
+      })
+      .select()
+      .single();
+    
+    if (error) throw error;
+    return data;
+  },
+};
+
 // Customers API
 export const customersApi = {
   getAll: async (searchQuery?: string) => {
@@ -942,6 +1025,8 @@ export const customersApi = {
         roomType: typeMap[booking.room?.type] || booking.room?.type,
         checkIn: booking.check_in,
         checkOut: booking.check_out,
+        checkInTime: booking.check_in_time,
+        checkOutTime: booking.check_out_time,
         status: booking.status,
         adults: booking.adults,
         children: booking.children,

@@ -30,6 +30,8 @@ interface CustomerDetails extends Customer {
     roomType: string;
     checkIn: string;
     checkOut: string;
+    checkInTime?: string;
+    checkOutTime?: string;
     status: string;
     adults: number;
     children: number;
@@ -206,7 +208,7 @@ function CustomerDetailsModal({ customerId, isOpen, onClose }: CustomerDetailsMo
                                   day: '2-digit', 
                                   month: 'short', 
                                   year: 'numeric' 
-                                })}
+                                })}{booking.checkInTime && ` at ${booking.checkInTime}`}
                               </span>
                               <span>→</span>
                               <span>
@@ -214,7 +216,7 @@ function CustomerDetailsModal({ customerId, isOpen, onClose }: CustomerDetailsMo
                                   day: '2-digit', 
                                   month: 'short', 
                                   year: 'numeric' 
-                                })}
+                                })}{booking.checkOutTime && ` at ${booking.checkOutTime}`}
                               </span>
                               <span>•</span>
                               <span>{booking.adults} Adults{booking.children > 0 ? `, ${booking.children} Children` : ''}</span>

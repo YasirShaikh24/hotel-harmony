@@ -54,7 +54,9 @@ interface Booking {
   customerName: string;
   customerEmail?: string; // Made optional
   customerPhone: string;
-  aadharNumber?: string;
+  documentName?: string;
+  documentNumber?: string;
+  customDocumentName?: string;
   customer2Name?: string;
   customerGstNumber?: string;
   roomNumber: string;
@@ -107,7 +109,9 @@ function AddBookingModal({ isOpen, onClose }: AddBookingModalProps) {
     customerName: '',
     customerEmail: '',
     customerPhone: '',
-    aadharNumber: '',
+    documentName: '',
+    documentNumber: '',
+    customDocumentName: '',
     customer2Name: '',
     customerGstNumber: '',
     roomNumber: '',
@@ -300,8 +304,12 @@ function AddBookingModal({ isOpen, onClose }: AddBookingModalProps) {
       toast({ title: 'Invalid Mobile Number', description: 'Mobile number must be exactly 10 digits', variant: 'destructive' });
       return;
     }
-    if (formData.aadharNumber.length !== 12) {
-      toast({ title: 'Invalid Aadhar Number', description: 'Aadhar number must be exactly 12 digits', variant: 'destructive' });
+    if (formData.documentName && !formData.documentNumber) {
+      toast({ title: 'Document Number Required', description: 'Please enter document number for the selected document type', variant: 'destructive' });
+      return;
+    }
+    if (formData.documentName === 'Other' && !formData.customDocumentName) {
+      toast({ title: 'Custom Document Name Required', description: 'Please enter the document name when "Other" is selected', variant: 'destructive' });
       return;
     }
 
@@ -421,22 +429,48 @@ function AddBookingModal({ isOpen, onClose }: AddBookingModalProps) {
             </div>
           </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="aadharNumber">Aadhar Card Number</Label>
-            <Input
-              id="aadharNumber"
-              value={formData.aadharNumber}
-              onChange={(e) => {
-                const value = e.target.value.replace(/\D/g, '');
-                if (value.length <= 12) setFormData({ ...formData, aadharNumber: value });
-              }}
-              placeholder="Enter 12-digit Aadhar number"
-              maxLength={12}
-              required
-            />
-            {formData.aadharNumber && formData.aadharNumber.length !== 12 && (
-              <p className="text-sm text-red-600">Aadhar number must be exactly 12 digits</p>
-            )}
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label htmlFor="documentName">Document Name</Label>
+              <select
+                id="documentName"
+                value={formData.documentName}
+                onChange={(e) => {
+                  setFormData({ ...formData, documentName: e.target.value });
+                  // Clear custom document name if not "Other"
+                  if (e.target.value !== 'Other') {
+                    setFormData(prev => ({ ...prev, documentName: e.target.value, customDocumentName: '' }));
+                  }
+                }}
+                className="w-full px-3 py-2 border border-input bg-background rounded-md text-sm ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
+              >
+                <option value="">Select document type</option>
+                <option value="Aadhar Card">Aadhar Card</option>
+                <option value="PAN Card">PAN Card</option>
+                <option value="Driving License">Driving License</option>
+                <option value="Passport">Passport</option>
+                <option value="Voter ID">Voter ID</option>
+                <option value="Other">Other</option>
+              </select>
+              {formData.documentName === 'Other' && (
+                <Input
+                  placeholder="Enter custom document name"
+                  value={formData.customDocumentName}
+                  onChange={(e) => setFormData({ ...formData, customDocumentName: e.target.value })}
+                  className="mt-2"
+                />
+              )}
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="documentNumber">Document Number</Label>
+              <Input
+                id="documentNumber"
+                value={formData.documentNumber}
+                onChange={(e) => setFormData({ ...formData, documentNumber: e.target.value })}
+                placeholder="Enter document number"
+                required={!!formData.documentName}
+              />
+            </div>
           </div>
 
           <div className="space-y-2">
@@ -687,7 +721,9 @@ function ViewBookingModal({ booking, isOpen, onClose }: ViewBookingModalProps) {
                 <p><strong>Email:</strong> {booking.customerEmail}</p>
               )}
               <p><strong>Phone:</strong> {booking.customerPhone}</p>
-              <p><strong>Aadhar:</strong> {booking.aadharNumber}</p>
+              {booking.documentName && (
+                <p><strong>{booking.documentName === 'Other' ? booking.customDocumentName : booking.documentName}:</strong> {booking.documentNumber}</p>
+              )}
               {booking.customerGstNumber && (
                 <p><strong>GST No:</strong> <span className="font-mono text-xs">{booking.customerGstNumber}</span></p>
               )}
@@ -739,7 +775,9 @@ function EditBookingModal({ booking, isOpen, onClose }: EditBookingModalProps) {
     customerName: '',
     customerEmail: '',
     customerPhone: '',
-    aadharNumber: '',
+    documentName: '',
+    documentNumber: '',
+    customDocumentName: '',
     customer2Name: '',
     customerGstNumber: '',
     roomNumber: '',
@@ -803,7 +841,9 @@ function EditBookingModal({ booking, isOpen, onClose }: EditBookingModalProps) {
         customerName: booking.customerName || '',
         customerEmail: booking.customerEmail || '',
         customerPhone: booking.customerPhone || '',
-        aadharNumber: booking.aadharNumber || '',
+        documentName: booking.documentName || '',
+        documentNumber: booking.documentNumber || '',
+        customDocumentName: booking.customDocumentName || '',
         customer2Name: booking.customer2Name || '',
         customerGstNumber: booking.customerGstNumber || '',
         roomNumber: booking.roomNumber || '',
@@ -895,7 +935,9 @@ function EditBookingModal({ booking, isOpen, onClose }: EditBookingModalProps) {
       customerName: booking.customerName || '',
       customerEmail: booking.customerEmail || '',
       customerPhone: booking.customerPhone || '',
-      aadharNumber: booking.aadharNumber || '',
+      documentName: booking.documentName || '',
+      documentNumber: booking.documentNumber || '',
+      customDocumentName: booking.customDocumentName || '',
       customer2Name: booking.customer2Name || '',
       customerGstNumber: booking.customerGstNumber || '',
       roomNumber: booking.roomNumber || '',
@@ -1003,9 +1045,48 @@ function EditBookingModal({ booking, isOpen, onClose }: EditBookingModalProps) {
             </div>
           </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="editAadharNumber">Aadhar Card Number</Label>
-            <Input id="editAadharNumber" value={formData.aadharNumber} readOnly className="bg-muted" />
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label htmlFor="editDocumentName">Document Name</Label>
+              <select
+                id="editDocumentName"
+                value={formData.documentName}
+                onChange={(e) => {
+                  setFormData({ ...formData, documentName: e.target.value });
+                  // Clear custom document name if not "Other"
+                  if (e.target.value !== 'Other') {
+                    setFormData(prev => ({ ...prev, documentName: e.target.value, customDocumentName: '' }));
+                  }
+                }}
+                className="w-full px-3 py-2 border border-input bg-background rounded-md text-sm ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
+              >
+                <option value="">Select document type</option>
+                <option value="Aadhar Card">Aadhar Card</option>
+                <option value="PAN Card">PAN Card</option>
+                <option value="Driving License">Driving License</option>
+                <option value="Passport">Passport</option>
+                <option value="Voter ID">Voter ID</option>
+                <option value="Other">Other</option>
+              </select>
+              {formData.documentName === 'Other' && (
+                <Input
+                  placeholder="Enter custom document name"
+                  value={formData.customDocumentName}
+                  onChange={(e) => setFormData({ ...formData, customDocumentName: e.target.value })}
+                  className="mt-2"
+                />
+              )}
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="editDocumentNumber">Document Number</Label>
+              <Input
+                id="editDocumentNumber"
+                value={formData.documentNumber}
+                onChange={(e) => setFormData({ ...formData, documentNumber: e.target.value })}
+                placeholder="Enter document number"
+                required={!!formData.documentName}
+              />
+            </div>
           </div>
 
           <div className="space-y-2">

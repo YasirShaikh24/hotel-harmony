@@ -957,7 +957,15 @@ function EditBookingModal({ booking, isOpen, onClose }: EditBookingModalProps) {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    updateBookingMutation.mutate(formData);
+    
+    // Convert roomNumber to roomId if room changed
+    const room = rooms?.find((r: Room) => r.roomNumber === formData.roomNumber);
+    const updateData = {
+      ...formData,
+      roomId: room?.id, // Add roomId for API
+    };
+    
+    updateBookingMutation.mutate(updateData);
   };
 
   if (!booking) return null;

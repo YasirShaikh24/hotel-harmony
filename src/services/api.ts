@@ -202,6 +202,9 @@ export const bookingsApi = {
         special_requests,
         advance_amount,
         advance_payment_method,
+        document_name,
+        document_number,
+        custom_document_name,
         created_at,
         customer:customers(id, name, email, mobile),
         room:rooms(*),
@@ -258,6 +261,9 @@ export const bookingsApi = {
         adults: booking.adults,
         children: booking.children,
         specialRequests: booking.special_requests,
+        documentName: booking.document_name,
+        documentNumber: booking.document_number,
+        customDocumentName: booking.custom_document_name,
         totalAmount: actualTotal,
         advanceAmount: booking.advance_amount || 0,
         advancePaymentMethod: booking.advance_payment_method || null,
@@ -309,7 +315,7 @@ export const bookingsApi = {
 
     const { data: existingCustomer, error: findError } = await supabase
       .from('customers')
-      .select('id, name, email, mobile, aadhar_encrypted, address, created_at')
+      .select('id, name, email, mobile, aadhar_encrypted, address, customer_gst_number, document_name, document_number, created_at')
       .eq('mobile', bookingData.customerPhone)
       .single();
 
@@ -326,6 +332,22 @@ export const bookingsApi = {
       if (existingCustomer.email !== bookingData.customerEmail)
         updates.email = bookingData.customerEmail;
 
+      if (existingCustomer.aadhar_encrypted !== bookingData.aadharNumber)
+        updates.aadhar_encrypted = bookingData.aadharNumber || null;
+
+      if (existingCustomer.address !== bookingData.address)
+        updates.address = bookingData.address || null;
+
+      // Update document info if provided
+      const newDocumentName = bookingData.documentName || bookingData.customDocumentName || null;
+      const newDocumentNumber = bookingData.documentNumber || null;
+      
+      if (existingCustomer.document_name !== newDocumentName)
+        updates.document_name = newDocumentName;
+        
+      if (existingCustomer.document_number !== newDocumentNumber)
+        updates.document_number = newDocumentNumber;
+
       if (Object.keys(updates).length > 0) {
         const { error: updateError } = await supabase
           .from('customers')
@@ -341,6 +363,11 @@ export const bookingsApi = {
         name: bookingData.customerName,
         mobile: bookingData.customerPhone,
         email: bookingData.customerEmail,
+        aadhar_encrypted: bookingData.aadharNumber || null,
+        address: bookingData.address || null,
+        customer_gst_number: bookingData.customerGstNumber || null,
+        document_name: bookingData.documentName || bookingData.customDocumentName || null,
+        document_number: bookingData.documentNumber || null,
       };
 
       const { data: newCustomer, error: customerError } = await supabase
@@ -353,7 +380,7 @@ export const bookingsApi = {
       customer = newCustomer;
     }
 
-    // 4️⃣ Create Booking with advance payment fields
+    // 4️⃣ Create Booking with advance payment fields and document fields
     const insertPayload = {
       customer_id: customer.id,
       room_id: room.id,
@@ -365,6 +392,9 @@ export const bookingsApi = {
       special_requests: bookingData.specialRequests || null,
       advance_amount: bookingData.advanceAmount || 0,
       advance_payment_method: bookingData.advancePaymentMethod || null,
+      document_name: bookingData.documentName || null,
+      document_number: bookingData.documentNumber || null,
+      custom_document_name: bookingData.customDocumentName || null,
     };
 
     const { data: booking, error: bookingError } = await supabase
@@ -429,7 +459,35 @@ export const bookingsApi = {
 
     if (fetchError) throw fetchError;
 
-    const updatePayload = {
+    // Update customer information if provided
+    if (updateData.customerName || updateData.customerEmail || updateData.customerPhone) {
+      const customerUpdates: any = {};
+      
+      if (updateData.customerName) customerUpdates.name = updateData.customerName;
+      if (updateData.customerEmail) customerUpdates.email = updateData.customerEmail;
+      if (updateData.customerPhone) customerUpdates.mobile = updateData.customerPhone;
+      if (updateData.address) customerUpdates.address = updateData.address;
+      if (updateData.customerGstNumber) customerUpdates.customer_gst_number = updateData.customerGstNumber;
+      if (updateData.documentName || updateData.customDocumentName) {
+        customerUpdates.document_name = updateData.documentName || updateData.customDocumentName;
+      }
+      if (updateData.documentNumber) customerUpdates.document_number = updateData.documentNumber;
+
+      if (Object.keys(customerUpdates).length > 0) {
+        const { error: customerUpdateError } = await supabase
+          .from('customers')
+          .update(customerUpdates)
+          .eq('id', oldBooking.customer_id);
+
+        if (customerUpdateError) {
+          console.error('Customer update error:', customerUpdateError);
+          throw customerUpdateError;
+        }
+      }
+    }
+
+    // Update booking information
+    const updatePayload: any = {
       check_in: updateData.checkIn,
       check_out: updateData.checkOut,
       status: updateData.status as 'pending' | 'confirmed' | 'checked_in' | 'checked_out' | 'cancelled',
@@ -437,6 +495,16 @@ export const bookingsApi = {
       children: updateData.children,
       special_requests: updateData.specialRequests || null,
     };
+
+    // Add room change if provided
+    if (updateData.roomId) {
+      updatePayload.room_id = updateData.roomId;
+    }
+
+    // Add document fields to booking if provided
+    if (updateData.documentName) updatePayload.document_name = updateData.documentName;
+    if (updateData.documentNumber) updatePayload.document_number = updateData.documentNumber;
+    if (updateData.customDocumentName) updatePayload.custom_document_name = updateData.customDocumentName;
 
     const { data: booking, error: updateError } = await supabase
       .from('bookings')
@@ -447,11 +515,83 @@ export const bookingsApi = {
 
     if (updateError) throw updateError;
 
+    // Update invoice if room or dates changed
+    if (updateData.roomId || updateData.checkIn || updateData.checkOut) {
+      console.log('Updating invoice for booking:', id, 'with data:', updateData);
+      
+      // Get the new room details
+      let roomPrice = 0;
+      if (updateData.roomId) {
+        const { data: newRoom, error: roomError } = await supabase
+          .from('rooms')
+          .select('price')
+          .eq('id', updateData.roomId)
+          .single();
+        
+        if (!roomError && newRoom) {
+          roomPrice = parseFloat(newRoom.price.toString());
+          console.log('New room price:', roomPrice);
+        }
+      } else {
+        // Get current room price
+        const { data: currentRoom, error: roomError } = await supabase
+          .from('rooms')
+          .select('price')
+          .eq('id', oldBooking.room_id)
+          .single();
+        
+        if (!roomError && currentRoom) {
+          roomPrice = parseFloat(currentRoom.price.toString());
+          console.log('Current room price:', roomPrice);
+        }
+      }
+
+      // Calculate new total based on dates and room price
+      const checkIn = new Date(updateData.checkIn || oldBooking.check_in);
+      const checkOut = new Date(updateData.checkOut || oldBooking.check_out);
+      const days = Math.max(1, Math.ceil((checkOut.getTime() - checkIn.getTime()) / (1000 * 60 * 60 * 24)));
+      const newRoomCharges = roomPrice * days;
+      
+      console.log('Calculated charges:', { days, roomPrice, newRoomCharges });
+
+      // Update the invoice
+      const { data: currentInvoice, error: invoiceSelectError } = await supabase
+        .from('invoices')
+        .select('id, total_paid, payment_status')
+        .eq('booking_id', id)
+        .single();
+
+      if (!invoiceSelectError && currentInvoice) {
+        const totalPaid = parseFloat(currentInvoice.total_paid?.toString() || '0');
+        
+        // Determine new payment status
+        let newPaymentStatus = 'pending';
+        if (totalPaid >= newRoomCharges) {
+          newPaymentStatus = 'paid';
+        } else if (totalPaid > 0) {
+          newPaymentStatus = 'partial';
+        }
+
+        const { error: invoiceUpdateError } = await supabase
+          .from('invoices')
+          .update({
+            room_charges: newRoomCharges,
+            total: newRoomCharges,
+            payment_status: newPaymentStatus,
+          })
+          .eq('booking_id', id);
+
+        if (invoiceUpdateError) {
+          console.error('Invoice update error:', invoiceUpdateError);
+        }
+      }
+    }
+
     // Room Status Logic
     if (updateData.status === 'checked_in') {
       await supabase.from('rooms')
         .update({ status: 'occupied' })
-        .eq('id', oldBooking.room_id);
+        .eq('id', updateData.roomId || oldBooking.room_id);
     }
 
     // Auto-checkout: Make room available when checked out (manual or auto)
@@ -459,7 +599,22 @@ export const bookingsApi = {
         updateData.status === 'cancelled') {
       await supabase.from('rooms')
         .update({ status: 'available' })
+        .eq('id', updateData.roomId || oldBooking.room_id);
+    }
+
+    // If room changed, update room statuses
+    if (updateData.roomId && updateData.roomId !== oldBooking.room_id) {
+      // Make old room available
+      await supabase.from('rooms')
+        .update({ status: 'available' })
         .eq('id', oldBooking.room_id);
+      
+      // Make new room occupied if booking is checked in
+      if (booking.status === 'checked_in') {
+        await supabase.from('rooms')
+          .update({ status: 'occupied' })
+          .eq('id', updateData.roomId);
+      }
     }
 
     return booking;
@@ -1257,6 +1412,9 @@ export const customersApi = {
         email,
         aadhar_encrypted,
         address,
+        customer_gst_number,
+        document_name,
+        document_number,
         created_at,
         bookings(
           id,
@@ -1285,6 +1443,10 @@ export const customersApi = {
       const name = customer.name.trim();
       const bookings = customer.bookings || [];
       
+      // Use document info directly from customer record
+      const documentName = customer.document_name;
+      const documentNumber = customer.document_number;
+      
       if (customerGroups.has(name)) {
         // Merge with existing customer group
         const existing = customerGroups.get(name);
@@ -1292,8 +1454,10 @@ export const customersApi = {
           id: customer.id,
           phone: customer.mobile,
           email: customer.email,
-          aadhar: customer.aadhar_encrypted,
+          documentName: documentName,
+          documentNumber: documentNumber,
           address: customer.address,
+          gstNumber: customer.customer_gst_number,
           createdAt: customer.created_at,
         });
         existing.bookings.push(...bookings);
@@ -1336,8 +1500,10 @@ export const customersApi = {
             id: customer.id,
             phone: customer.mobile,
             email: customer.email,
-            aadhar: customer.aadhar_encrypted,
+            documentName: documentName,
+            documentNumber: documentNumber,
             address: customer.address,
+            gstNumber: customer.customer_gst_number,
             createdAt: customer.created_at,
           }],
           bookings: bookings,
@@ -1355,8 +1521,10 @@ export const customersApi = {
       name: group.name,
       phone: group.contacts[0].phone, // Primary contact
       email: group.contacts[0].email, // Primary contact
-      aadhar: group.contacts[0].aadhar, // Primary contact
+      documentName: group.contacts[0].documentName, // Primary contact
+      documentNumber: group.contacts[0].documentNumber, // Primary contact
       address: group.contacts[0].address, // Primary contact
+      gstNumber: group.contacts[0].gstNumber, // Primary contact
       totalStays: group.totalStays,
       totalRevenue: group.totalRevenue,
       lastStay: group.lastStay,
@@ -1376,6 +1544,9 @@ export const customersApi = {
         email,
         aadhar_encrypted,
         address,
+        customer_gst_number,
+        document_name,
+        document_number,
         created_at
       `)
       .eq('id', id)
@@ -1406,6 +1577,10 @@ export const customersApi = {
       'presidential': 'Presidential'
     };
     
+    // Use document info directly from customer record
+    const documentName = customer.document_name;
+    const documentNumber = customer.document_number;
+    
     const totalStays = bookings.length;
     
     // Calculate total revenue from actual payments received
@@ -1421,8 +1596,10 @@ export const customersApi = {
       name: customer.name,
       phone: customer.mobile,
       email: customer.email,
-      aadhar: customer.aadhar_encrypted,
+      documentName: documentName,
+      documentNumber: documentNumber,
       address: customer.address,
+      gstNumber: customer.customer_gst_number,
       totalStays,
       totalRevenue,
       lastStay,

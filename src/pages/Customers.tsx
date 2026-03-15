@@ -23,7 +23,8 @@ interface Customer {
     id: string;
     phone: string;
     email: string;
-    aadhar?: string;
+    documentName?: string;
+    documentNumber?: string;
     address?: string;
     createdAt: string;
   }>;
@@ -34,7 +35,8 @@ interface CustomerDetails {
   name: string;
   phone: string;
   email: string;
-  aadhar?: string;
+  documentName?: string;
+  documentNumber?: string;
   address?: string;
   totalStays: number;
   totalRevenue: number;
@@ -127,10 +129,10 @@ function CustomerDetailsModal({ customerId, isOpen, onClose }: CustomerDetailsMo
                     })}
                   </p>
                 </div>
-                {customer.aadhar && (
+                {customer.documentName && customer.documentNumber && (
                   <div>
-                    <p className="text-sm text-gray-600">Aadhar</p>
-                    <p className="font-semibold text-gray-900 font-mono text-sm">{customer.aadhar}</p>
+                    <p className="text-sm text-gray-600">{customer.documentName}</p>
+                    <p className="font-semibold text-gray-900 font-mono text-sm">{customer.documentNumber}</p>
                   </div>
                 )}
                 {customer.address && (
